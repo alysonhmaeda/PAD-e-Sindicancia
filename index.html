@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SECOP — Central de Processos Disciplinares v2</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+/* ── Reset ───────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F4F2EF;--surf:#FFF;--bdr:#D9D7D0;--bdr-s:#EAE8E2;
+  --tx:#1A1917;--tx2:#5C5A55;--tx3:#9B9890;
+  --blue:#1A4E8A;--blue-bg:#EBF1F9;--blue-lt:#D0E2F5;
+  --green:#1A6B45;--green-bg:#E6F4ED;
+  --amber:#7A4F00;--amber-bg:#FDF3DC;
+  --red:#8B1A1A;--red-bg:#FCEAEA;
+  --gold:#8B6800;--gold-bg:#FDF7E4;
+  --font:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',monospace;
+  --r:4px;--r2:6px;
+  --sh:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.04);
+  --sh2:0 4px 14px rgba(0,0,0,.10);
+}
+html,body{height:100%;font-family:var(--font);font-size:13px;color:var(--tx);background:var(--bg);line-height:1.5;overflow:hidden}
+
+/* ── App shell ───────────────────────────────── */
+.app{display:flex;flex-direction:column;height:100vh}
+.topbar{background:var(--blue);color:#fff;display:flex;align-items:center;padding:0 0 0 14px;height:44px;flex-shrink:0;user-select:none}
+.brand{font-size:13px;font-weight:600;letter-spacing:.3px;padding-right:16px;border-right:1px solid rgba(255,255,255,.2);margin-right:2px;white-space:nowrap;display:flex;align-items:center;gap:7px}
+.brand-sub{font-size:10px;font-weight:400;opacity:.65;display:block}
+.nav{display:flex;flex:1;overflow-x:auto}
+.ntab{padding:0 11px;height:44px;display:flex;align-items:center;font-size:12px;color:rgba(255,255,255,.65);cursor:pointer;border-bottom:2px solid transparent;gap:5px;white-space:nowrap;transition:color .12s}
+.ntab:hover{color:#fff}.ntab.active{color:#fff;border-bottom-color:rgba(255,255,255,.9);font-weight:500}
+.ntab i{font-size:14px}
+.tbr{margin-left:auto;display:flex;border-left:1px solid rgba(255,255,255,.15)}
+.tbtn{height:44px;padding:0 12px;display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.75);cursor:pointer;border:none;background:none;font-family:var(--font)}
+.tbtn:hover{background:rgba(255,255,255,.1);color:#fff}
+
+/* ── Workspace ───────────────────────────────── */
+.ws{display:flex;flex:1;overflow:hidden;min-height:0}
+.sb{width:210px;background:var(--surf);border-right:1px solid var(--bdr);overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column}
+.sb-sec{padding:8px 0;border-bottom:1px solid var(--bdr-s)}
+.sb-lbl{font-size:10px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.6px;padding:0 11px;margin-bottom:3px}
+.sb-item{padding:6px 11px;display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--tx2);border-left:2px solid transparent;transition:all .1s;text-decoration:none}
+.sb-item:hover{background:var(--bg);color:var(--tx)}
+.sb-item.active{background:var(--blue-bg);color:var(--blue);border-left-color:var(--blue);font-weight:500}
+.sb-item i{font-size:14px;flex-shrink:0}
+.sb-cnt{margin-left:auto;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px}
+.cnt-r{background:var(--red-bg);color:var(--red)}
+.cnt-a{background:var(--amber-bg);color:var(--amber)}
+.cnt-b{background:var(--blue-bg);color:var(--blue)}
+.content-area{flex:1;overflow:hidden;display:flex;flex-direction:column}
+
+/* ── Pages ───────────────────────────────────── */
+.page{display:none;padding:14px;overflow-y:auto;flex:1}
+.page.active{display:block}
+/* Autos page is special — no padding, full height flex, lives inside .ws */
+#page-autos{display:none;flex:1;overflow:hidden;padding:0;min-height:0}
+#page-autos.active{display:flex}
+
+/* ── Metric cards ────────────────────────────── */
+.mg4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.mg3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.mg2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:10px}
+.mc{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);padding:11px 13px}
+.ml{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.mv{font-size:22px;font-weight:600;line-height:1}
+.ms{font-size:10px;color:var(--tx3);margin-top:2px}
+
+/* ── Card ────────────────────────────────────── */
+.card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);box-shadow:var(--sh);margin-bottom:10px}
+.ch{padding:9px 13px;border-bottom:1px solid var(--bdr-s);display:flex;align-items:center;justify-content:space-between}
+.ct{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+.ct i{font-size:14px;color:var(--tx3)}
+.cb{padding:11px 13px}
+
+/* ── Badges ──────────────────────────────────── */
+.bdg{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:500;padding:2px 7px;border-radius:3px;font-family:var(--mono)}
+.bb{background:var(--blue-bg);color:var(--blue)}.bg{background:var(--green-bg);color:var(--green)}
+.ba{background:var(--amber-bg);color:var(--amber)}.br{background:var(--red-bg);color:var(--red)}
+.bc{background:#EDEBE6;color:var(--tx2)}.bgold{background:var(--gold-bg);color:var(--gold)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.dg{background:#1A6B45}.da{background:#D4860A}.dr{background:#C0392B;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Table ───────────────────────────────────── */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;font-size:10px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;padding:6px 9px;border-bottom:1px solid var(--bdr);background:var(--bg);white-space:nowrap}
+.tbl td{padding:8px 9px;border-bottom:1px solid var(--bdr-s);vertical-align:middle}
+.tbl tbody tr{cursor:pointer;transition:background .1s}
+.tbl tbody tr:hover td{background:#F0EEE8}
+.tbl tbody tr:last-child td{border-bottom:none}
+
+/* ── Buttons ─────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;font-size:12px;border-radius:var(--r);cursor:pointer;border:1px solid var(--bdr);background:var(--surf);color:var(--tx);font-family:var(--font);font-weight:500;transition:all .1s;white-space:nowrap}
+.btn:hover{background:var(--bg)}.btn:active{transform:scale(.99)}
+.btn-p{background:var(--blue);color:#fff;border-color:var(--blue)}.btn-p:hover{background:#163F70;border-color:#163F70}
+.btn-sm{padding:4px 8px;font-size:11px}
+.btn-g{border-color:transparent;background:none}.btn-g:hover{background:var(--bg);border-color:var(--bdr)}
+.btn-d{background:var(--red-bg);color:var(--red);border-color:#EDB4B4}.btn-d:hover{background:#F7D4D4}
+.btn-gold{background:var(--gold-bg);color:var(--gold);border-color:#DFC85A}
+
+/* ── Forms ───────────────────────────────────── */
+.fg{margin-bottom:9px}
+.fl{font-size:11px;font-weight:500;color:var(--tx2);margin-bottom:3px;display:block}
+.fc{width:100%;padding:6px 9px;font-size:12px;border:1px solid var(--bdr);border-radius:var(--r);background:var(--surf);color:var(--tx);font-family:var(--font);transition:border-color .1s}
+.fc:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 2px rgba(26,78,138,.12)}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+textarea.fc{resize:vertical;min-height:60px}
+
+/* ── Modal ───────────────────────────────────── */
+.mbd{display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:200;align-items:center;justify-content:center}
+.mbd.open{display:flex}
+.mdl{background:var(--surf);border-radius:var(--r2);border:1px solid var(--bdr);box-shadow:var(--sh2);width:560px;max-width:96vw;max-height:91vh;overflow-y:auto;display:flex;flex-direction:column}
+.mdl-lg{width:780px}.mdl-sm{width:420px}
+.mh{padding:13px 15px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surf);z-index:1}
+.mt{font-size:14px;font-weight:600;display:flex;align-items:center;gap:7px}
+.mt i{font-size:16px;color:var(--tx3)}
+.mb{padding:15px;flex:1}
+.mf{padding:10px 15px;border-top:1px solid var(--bdr);display:flex;justify-content:flex-end;gap:7px;background:var(--bg)}
+.xb{background:none;border:none;cursor:pointer;color:var(--tx3);font-size:17px;border-radius:var(--r);padding:2px 4px;display:flex;align-items:center}
+.xb:hover{color:var(--tx);background:var(--bg)}
+.divider{height:1px;background:var(--bdr-s);margin:10px 0}
+
+/* ── Filter bar ──────────────────────────────── */
+.fbar{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px}
+.fbtn{padding:3px 9px;font-size:11px;border-radius:20px;border:1px solid var(--bdr);background:var(--surf);color:var(--tx2);cursor:pointer;font-family:var(--font);transition:all .1s}
+.fbtn:hover{border-color:var(--tx2);color:var(--tx)}
+.fbtn.active{background:var(--blue-bg);color:var(--blue);border-color:var(--blue-lt);font-weight:500}
+
+/* ── Progress bar ────────────────────────────── */
+.pb{background:var(--bdr-s);border-radius:10px;height:5px;width:100%;margin-top:3px}
+.pf{height:5px;border-radius:10px}
+
+/* ── Section header ──────────────────────────── */
+.shdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.stl{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+.stl i{font-size:14px;color:var(--tx3)}
+
+/* ── Search ──────────────────────────────────── */
+.sw{position:relative}
+.sw i{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--tx3);pointer-events:none}
+.sw input{padding-left:28px}
+
+/* ── Status bar ──────────────────────────────── */
+.stbar{background:var(--blue-bg);border:1px solid var(--blue-lt);border-radius:var(--r);padding:6px 11px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--blue);margin-bottom:11px}
+
+/* ── Timeline ────────────────────────────────── */
+.tli{display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--bdr-s)}
+.tli:last-child{border-bottom:none}
+.tld{font-size:10px;color:var(--tx3);font-family:var(--mono);margin-bottom:2px}
+.tlt{font-size:12px}
+
+/* ── Witness row ─────────────────────────────── */
+.wrow{display:grid;grid-template-columns:1fr 100px 110px 28px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--bdr-s);font-size:12px}
+.wrow:last-child{border-bottom:none}
+
+/* ── Oitiva agenda ───────────────────────────── */
+.orow{display:grid;grid-template-columns:1fr 110px 90px 70px;gap:8px;align-items:center;padding:7px 9px;border-bottom:1px solid var(--bdr-s);font-size:12px}
+.orow:hover{background:var(--bg);border-radius:var(--r)}
+.orow:last-child{border-bottom:none}
+
+/* ── Pendência card ──────────────────────────── */
+.pcard{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);margin-bottom:7px;overflow:hidden}
+.pc-h{padding:7px 11px;display:flex;align-items:center;gap:7px}
+.pc-b{padding:5px 11px 8px;font-size:11px;color:var(--tx2)}
+.pc-r{border-left:3px solid var(--red)}.pc-a{border-left:3px solid #D4860A}
+
+/* ─────────────────────────────────────────────
+   AUTOS DIGITAIS — Full-screen layout
+   col-1: process list (200px)
+   col-2: pieces panel (230px)
+   col-3: viewer (remaining)
+───────────────────────────────────────────── */
+.autos-wrap{display:flex;flex:1;overflow:hidden;height:100%}
+
+/* Process list column */
+.autos-procs{width:200px;flex-shrink:0;background:var(--surf);border-right:1px solid var(--bdr);display:flex;flex-direction:column;overflow:hidden}
+.ap-head{padding:9px 11px;border-bottom:1px solid var(--bdr);flex-shrink:0}
+.ap-item{padding:7px 11px;border-bottom:1px solid var(--bdr-s);cursor:pointer;transition:background .1s}
+.ap-item:hover{background:var(--bg)}
+.ap-item.active{background:var(--blue-bg);border-left:2px solid var(--blue)}
+.ap-id{font-size:11px;font-weight:600;color:var(--blue);font-family:var(--mono)}
+.ap-obj{font-size:10px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+
+/* Pieces panel column */
+.autos-pecas{width:230px;flex-shrink:0;background:var(--surf);border-right:1px solid var(--bdr);display:flex;flex-direction:column;overflow:hidden}
+.pec-head{padding:9px 11px;border-bottom:1px solid var(--bdr);flex-shrink:0}
+.pec-list{flex:1;overflow-y:auto}
+.pec-item{display:flex;gap:7px;padding:8px 10px;border-bottom:1px solid var(--bdr-s);cursor:pointer;transition:background .1s;align-items:flex-start}
+.pec-item:hover{background:var(--bg)}
+.pec-item.active{background:var(--blue-bg);border-left:2px solid var(--blue)}
+.pfl{font-size:10px;font-weight:600;color:var(--tx3);font-family:var(--mono);min-width:28px;margin-top:1px}
+.pinfo{flex:1;min-width:0}
+.ptyp{font-size:11px;font-weight:500;color:var(--tx)}
+.pdsc{font-size:10px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.pdat{font-size:10px;color:var(--tx3);font-family:var(--mono)}
+.pec-foot{padding:7px 11px;border-top:1px solid var(--bdr);font-size:10px;color:var(--tx3);flex-shrink:0}
+
+/* Viewer column — fills all remaining space */
+.autos-viewer{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#DDDBD7;min-width:0}
+.av-toolbar{background:var(--surf);border-bottom:1px solid var(--bdr);padding:7px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0;height:40px}
+.av-frame{flex:1;overflow:hidden;position:relative}
+.av-frame iframe{width:100%;height:100%;border:none;display:block}
+.av-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--tx3);gap:8px}
+.av-empty i{font-size:44px}
+
+/* ── Toast ───────────────────────────────────── */
+.tc{position:fixed;bottom:14px;right:14px;display:flex;flex-direction:column;gap:5px;z-index:999}
+.tst{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);padding:9px 13px;font-size:12px;box-shadow:var(--sh2);display:flex;align-items:center;gap:7px;animation:tin .2s ease;max-width:300px}
+@keyframes tin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ts{border-left:3px solid var(--green)}.te{border-left:3px solid var(--red)}.ti{border-left:3px solid var(--blue)}
+
+/* ── Checkbox ────────────────────────────────── */
+input[type=checkbox]{width:14px;height:14px;accent-color:var(--blue);cursor:pointer}
+
+/* ── Empty state ─────────────────────────────── */
+.es{padding:24px;text-align:center;color:var(--tx3);font-size:12px}
+.es i{font-size:28px;display:block;margin-bottom:7px}
+
+/* ── Scroll helpers ──────────────────────────── */
+.ov-auto{overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="brand">
+    <i class="ti ti-shield-lock" style="font-size:16px"></i>
+    <div>SECOP <span class="brand-sub">Secretaria de Comissões Permanentes</span></div>
+  </div>
+  <div class="nav">
+    <div class="ntab active" id="tab-dashboard"   onclick="navTo('dashboard',this)"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+    <div class="ntab" id="tab-processos"  onclick="navTo('processos',this)"><i class="ti ti-files"></i>Processos</div>
+    <div class="ntab" id="tab-prazos"     onclick="navTo('prazos',this)"><i class="ti ti-clock-hour-4"></i>Prazos</div>
+    <div class="ntab" id="tab-instrucao"  onclick="navTo('instrucao',this)"><i class="ti ti-list-check"></i>Instrução</div>
+    <div class="ntab" id="tab-autos"      onclick="navTo('autos',this)"><i class="ti ti-book-2"></i>Autos</div>
+    <div class="ntab" id="tab-comissoes"  onclick="navTo('comissoes',this)"><i class="ti ti-users"></i>Comissões</div>
+    <div class="ntab" id="tab-pendencias" onclick="navTo('pendencias',this)"><i class="ti ti-alert-triangle"></i>Pendências</div>
+    <div class="ntab" id="tab-gratificacao" onclick="navTo('gratificacao',this)"><i class="ti ti-receipt"></i>Gratificação</div>
+  </div>
+  <div class="tbr">
+    <button class="tbtn" onclick="sincronizar()"><i class="ti ti-refresh" id="sync-icon"></i>Sincronizar</button>
+    <button class="tbtn" onclick="openM('m-config')"><i class="ti ti-settings"></i></button>
+  </div>
+</div>
+
+<!-- WORKSPACE -->
+<div class="ws">
+
+<!-- SIDEBAR -->
+<aside class="sb" id="main-sb">
+  <div class="sb-sec">
+    <div class="sb-lbl">Geral</div>
+    <div class="sb-item active" onclick="navTo('dashboard',null)"><i class="ti ti-home"></i>Dashboard</div>
+    <div class="sb-item" onclick="navTo('processos',null)"><i class="ti ti-files"></i>Processos</div>
+    <div class="sb-item" onclick="navTo('autos',null)"><i class="ti ti-book-2"></i>Autos Digitais</div>
+    <div class="sb-item" onclick="navTo('instrucao',null)"><i class="ti ti-list-check"></i>Instrução</div>
+  </div>
+  <div class="sb-sec">
+    <div class="sb-lbl">Alertas</div>
+    <div class="sb-item" onclick="navTo('pendencias',null)"><i class="ti ti-flame" style="color:var(--red)"></i>Vencidos<span class="sb-cnt cnt-r" id="cnt-v">0</span></div>
+    <div class="sb-item" onclick="navTo('pendencias',null)"><i class="ti ti-clock-exclamation" style="color:var(--amber)"></i>Urgentes<span class="sb-cnt cnt-a" id="cnt-u">0</span></div>
+    <div class="sb-item" onclick="navTo('pendencias',null)"><i class="ti ti-calendar-event" style="color:var(--blue)"></i>Oitivas hoje<span class="sb-cnt cnt-b" id="cnt-o">0</span></div>
+  </div>
+  <div class="sb-sec">
+    <div class="sb-lbl">Planilhas</div>
+    <a class="sb-item" href="https://docs.google.com/spreadsheets/d/1-xxJTYUyCNnKyZiPLzmLakV8B1kq2V65NIM9YZCEccw/edit" target="_blank"><i class="ti ti-table"></i>Processos</a>
+    <a class="sb-item" href="https://docs.google.com/spreadsheets/d/1nWzyNG5BHAs8tv2RIkBgrOMxkVdinuTnDnWGbPL1mJo/edit" target="_blank"><i class="ti ti-table"></i>Linha do Tempo</a>
+    <a class="sb-item" href="https://docs.google.com/spreadsheets/d/1z5SHfcx-RPEVFMQKwlACNfTYB4VVl9hJfeDcwvgkeyA/edit" target="_blank"><i class="ti ti-table"></i>Membros</a>
+    <a class="sb-item" href="https://docs.google.com/spreadsheets/d/1ZlK2GZFLa1rLf0HYJoopQz229AAaPL_wtTewDXCnkxY/edit" target="_blank"><i class="ti ti-table"></i>Afastamentos</a>
+  </div>
+</aside>
+
+<!-- CONTENT -->
+<div class="content-area">
+
+<!-- ══════════════════════════════ DASHBOARD ══ -->
+<div id="page-dashboard" class="page active">
+  <div id="dash-sb" class="stbar" style="display:none">
+    <i class="ti ti-circle-check"></i><span id="dash-sb-msg"></span>
+    <a href="https://docs.google.com/spreadsheets/d/1-xxJTYUyCNnKyZiPLzmLakV8B1kq2V65NIM9YZCEccw/edit" target="_blank" style="margin-left:auto;color:var(--blue);font-size:11px;display:flex;align-items:center;gap:3px">Sheets <i class="ti ti-external-link" style="font-size:11px"></i></a>
+  </div>
+  <div class="mg4" id="dash-metrics"></div>
+  <div class="mg2">
+    <div class="card">
+      <div class="ch"><div class="ct"><i class="ti ti-chart-bar"></i>Por fase</div></div>
+      <div class="cb"><div id="chart-fase" style="display:flex;align-items:flex-end;gap:5px;height:72px"></div></div>
+    </div>
+    <div class="card">
+      <div class="ch"><div class="ct"><i class="ti ti-bell"></i>Alertas ativos</div></div>
+      <div class="cb ov-auto" style="max-height:140px" id="dash-alertas"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ch"><div class="ct"><i class="ti ti-list"></i>Processos recentes</div>
+      <button class="btn btn-sm" onclick="navTo('processos',null)">Ver todos <i class="ti ti-arrow-right"></i></button>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl"><tbody id="dash-tb"></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="ch"><div class="ct"><i class="ti ti-calendar-event"></i>Próximas oitivas</div></div>
+    <div class="cb" id="dash-oitivas"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ PROCESSOS ══ -->
+<div id="page-processos" class="page">
+  <div class="shdr">
+    <div class="stl"><i class="ti ti-files"></i>Controle de processos</div>
+    <div style="display:flex;gap:6px">
+      <div class="sw"><i class="ti ti-search"></i><input class="fc" type="text" placeholder="Buscar..." oninput="buscar(this.value)" style="width:170px;padding-left:27px"></div>
+      <button class="btn btn-p" onclick="openM('m-novo-proc')"><i class="ti ti-plus"></i>Novo processo</button>
+    </div>
+  </div>
+  <div class="fbar" id="fb-t">
+    <button class="fbtn active" onclick="setF(this,'t','todos')">Todos</button>
+    <button class="fbtn" onclick="setF(this,'t','PAD')">PAD</button>
+    <button class="fbtn" onclick="setF(this,'t','Sindicância')">Sindicância</button>
+  </div>
+  <div class="fbar" id="fb-s">
+    <button class="fbtn active" onclick="setF(this,'s','todos')">Todos os status</button>
+    <button class="fbtn" onclick="setF(this,'s','regular')"><span class="dot dg" style="margin-right:3px"></span>Regular</button>
+    <button class="fbtn" onclick="setF(this,'s','urgente')"><span class="dot da" style="margin-right:3px"></span>Urgente</button>
+    <button class="fbtn" onclick="setF(this,'s','vencido')"><span class="dot dr" style="margin-right:3px"></span>Vencido</button>
+  </div>
+  <div class="card" style="overflow-x:auto">
+    <table class="tbl">
+      <thead><tr><th style="width:10px"></th><th>Portaria</th><th>ID</th><th>Objeto</th><th>Fase</th><th>Comissão</th><th>Prazo</th><th>Ações</th></tr></thead>
+      <tbody id="proc-tb"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ PRAZOS ══════ -->
+<div id="page-prazos" class="page">
+  <div class="shdr">
+    <div class="stl"><i class="ti ti-clock-hour-4"></i>Controle de prazos</div>
+    <span style="font-size:11px;color:var(--tx3)">PAD = 60d · Sindicância = 30d (Lei 8.112/90)</span>
+  </div>
+  <div class="mg4" id="prazo-mg"></div>
+  <div class="card" style="overflow-x:auto">
+    <table class="tbl">
+      <thead><tr><th>Processo</th><th>Objeto</th><th>Portaria em</th><th>Prazo</th><th>Progresso</th><th>Status</th><th>Prazos adicionais</th></tr></thead>
+      <tbody id="prazo-tb"></tbody>
+    </table>
+  </div>
+  <p style="font-size:10px;color:var(--tx3);margin-top:7px">* Art. 152 e 167 Lei 8.112/90 — prorrogação por igual período mediante nova portaria motivada.</p>
+</div>
+
+<!-- ══════════════════════════════ INSTRUÇÃO ══ -->
+<div id="page-instrucao" class="page">
+  <div class="shdr">
+    <div class="stl"><i class="ti ti-list-check"></i>Gestão de instrução processual</div>
+    <div style="display:flex;gap:6px">
+      <select class="fc" id="inst-sel" onchange="renderInstrucao()" style="width:220px;font-size:12px">
+        <option value="">— Selecione um processo —</option>
+      </select>
+    </div>
+  </div>
+  <div id="inst-content">
+    <div class="es"><i class="ti ti-list-check"></i>Selecione um processo para gerenciar a instrução.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ COMISSÕES ══ -->
+<div id="page-comissoes" class="page">
+  <div class="shdr">
+    <div class="stl"><i class="ti ti-users"></i>Gestão de comissões</div>
+    <button class="btn btn-p" onclick="openM('m-novo-membro')"><i class="ti ti-user-plus"></i>Novo membro</button>
+  </div>
+  <div class="mg2" id="comissoes-grid"></div>
+  <div class="card">
+    <div class="ch">
+      <div class="ct"><i class="ti ti-calendar-off"></i>Afastamentos e impedimentos</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-p" onclick="openM('m-afastamento')"><i class="ti ti-plus"></i>Registrar</button>
+        <a href="https://docs.google.com/spreadsheets/d/1ZlK2GZFLa1rLf0HYJoopQz229AAaPL_wtTewDXCnkxY/edit" target="_blank" class="btn btn-sm"><i class="ti ti-external-link"></i>Sheets</a>
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th>Membro</th><th>Tipo</th><th>Escopo</th><th>Início</th><th>Término</th><th>Substituto</th><th>Status</th></tr></thead>
+      <tbody id="aft-tb"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ PENDÊNCIAS ═ -->
+<div id="page-pendencias" class="page">
+  <div class="shdr">
+    <div class="stl"><i class="ti ti-alert-triangle"></i>Central de pendências</div>
+    <span id="pend-count" class="bdg br"></span>
+  </div>
+  <div id="pend-content"></div>
+</div>
+
+<!-- ══════════════════════════════ GRATIFICAÇÃO -->
+<div id="page-gratificacao" class="page">
+  <div class="shdr">
+    <div class="stl"><i class="ti ti-receipt"></i>Módulo de gratificação</div>
+    <button class="btn btn-p" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+  </div>
+  <div style="margin-bottom:10px;padding:7px 11px;background:var(--blue-bg);border-radius:var(--r);font-size:11px;color:var(--blue);display:flex;align-items:center;gap:6px">
+    <i class="ti ti-info-circle" style="font-size:13px"></i>
+    Cálculo descontando afastamentos registrados. Período: <strong id="grat-per"></strong>
+  </div>
+  <div class="card" style="overflow-x:auto">
+    <table class="tbl">
+      <thead><tr><th>Membro</th><th>Função</th><th>Dias úteis</th><th>Afastado</th><th>Efetivos</th><th>%</th><th>Direito</th></tr></thead>
+      <tbody id="grat-tb"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ AUTOS ═══════ -->
+<!-- Lives inside content-area so it fills full height of ws -->
+<div id="page-autos">
+  <div class="autos-wrap">
+
+    <!-- Col 1: process list -->
+    <div class="autos-procs">
+      <div class="ap-head">
+        <div class="sw" style="width:100%">
+          <i class="ti ti-search"></i>
+          <input class="fc" type="text" placeholder="Filtrar processo..." oninput="filtrarProcAutos(this.value)" style="padding-left:27px;width:100%;font-size:11px">
+        </div>
+      </div>
+      <div class="ov-auto" style="flex:1" id="autos-proc-list"></div>
+    </div>
+
+    <!-- Col 2: pieces panel -->
+    <div class="autos-pecas">
+      <div class="pec-head">
+        <div style="font-size:11px;font-weight:600;margin-bottom:6px;color:var(--tx2)" id="autos-proc-title">Selecione um processo</div>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-p btn-sm" style="flex:1" onclick="openM('m-juntar')" id="btn-juntar" disabled><i class="ti ti-file-import"></i>Juntar doc.</button>
+        </div>
+      </div>
+      <div class="pec-list" id="autos-pec-list">
+        <div class="es"><i class="ti ti-files"></i>Sem peças</div>
+      </div>
+      <div class="pec-foot"><span id="pec-count">0 peças</span> · <span id="pec-fase" style="color:var(--tx3)"></span></div>
+    </div>
+
+    <!-- Col 3: viewer (full remaining space) -->
+    <div class="autos-viewer">
+      <div class="av-toolbar">
+        <span style="font-size:11px;color:var(--tx2);font-family:var(--mono)" id="av-label">Selecione uma peça</span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn btn-sm btn-g" id="btn-drive-open" disabled onclick="abrirNoDrive()"><i class="ti ti-external-link"></i>Abrir no Drive</button>
+        </div>
+      </div>
+      <div class="av-frame" id="av-frame">
+        <div class="av-empty"><i class="ti ti-file-description"></i><span style="font-size:12px">Selecione uma peça para visualizar</span></div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /page-autos -->
+
+</div><!-- /content-area -->
+</div><!-- /ws -->
+</div><!-- /app -->
+
+<!-- TOAST -->
+<div class="tc" id="tc"></div>
+
+<!-- ═══════════════════════ MODALS ══════════════ -->
+
+<!-- Config -->
+<div class="mbd" id="m-config">
+<div class="mdl mdl-sm">
+  <div class="mh"><div class="mt"><i class="ti ti-settings"></i>Configuração</div><button class="xb" onclick="closeM('m-config')"><i class="ti ti-x"></i></button></div>
+  <div class="mb">
+    <div class="fg"><label class="fl">URL do Google Apps Script</label><input class="fc" id="cfg-url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="fg"><label class="fl">Secretário(a) responsável</label><input class="fc" id="cfg-sec" placeholder="Nome e cargo"></div>
+    <div class="fg"><label class="fl">Órgão / Unidade</label><input class="fc" id="cfg-org" value="Secretaria de Comissões Permanentes"></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="closeM('m-config')">Cancelar</button><button class="btn btn-p" onclick="salvarCfg()"><i class="ti ti-check"></i>Salvar</button></div>
+</div>
+</div>
+
+<!-- Novo processo -->
+<div class="mbd" id="m-novo-proc">
+<div class="mdl">
+  <div class="mh"><div class="mt"><i class="ti ti-file-plus"></i>Novo processo</div><button class="xb" onclick="closeM('m-novo-proc')"><i class="ti ti-x"></i></button></div>
+  <div class="mb">
+    <div class="fr2"><div class="fg"><label class="fl">Tipo</label><select class="fc" id="np-tipo"><option>PAD</option><option>Sindicância</option></select></div><div class="fg"><label class="fl">Nº Portaria</label><input class="fc" id="np-port" placeholder="025/2025"></div></div>
+    <div class="fg"><label class="fl">Objeto</label><input class="fc" id="np-obj" placeholder="Descreva o objeto da apuração"></div>
+    <div class="fr2"><div class="fg"><label class="fl">Data da portaria</label><input class="fc" type="date" id="np-data"></div><div class="fg"><label class="fl">Comissão</label><select class="fc" id="np-com"><option>Comissão A</option><option>Comissão B</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Advogado do acusado</label><input class="fc" id="np-adv" placeholder="Nome / OAB"></div><div class="fg"><label class="fl">Fase</label><select class="fc" id="np-fase"><option>Instauração</option><option>Instrução</option><option>Oitivas</option><option>Indiciamento</option><option>Defesa</option><option>Relatório</option><option>Julgamento</option></select></div></div>
+    <div class="fg"><label class="fl">Observação inicial</label><textarea class="fc" id="np-obs" placeholder="Notas iniciais..."></textarea></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="closeM('m-novo-proc')">Cancelar</button><button class="btn btn-p" onclick="salvarProc()"><i class="ti ti-check"></i>Registrar</button></div>
+</div>
+</div>
+
+<!-- Detalhe processo -->
+<div class="mbd" id="m-detalhe">
+<div class="mdl mdl-lg">
+  <div class="mh">
+    <div class="mt" id="d-title"><i class="ti ti-file-description"></i>Detalhe</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-sm" onclick="abrirAutosProc(curProc)"><i class="ti ti-book-2"></i>Autos</button>
+      <button class="btn btn-sm" onclick="openM('m-prazo-add')"><i class="ti ti-clock-plus"></i>+ Prazo</button>
+      <button class="btn btn-sm btn-d" onclick="deletarProc()"><i class="ti ti-trash"></i>Excluir</button>
+      <button class="xb" onclick="closeM('m-detalhe')"><i class="ti ti-x"></i></button>
+    </div>
+  </div>
+  <div class="mb">
+    <div id="d-meta" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px"></div>
+    <div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+      <div style="font-size:12px;font-weight:600">Linha do tempo</div>
+      <select class="fc" id="nota-tipo" style="width:auto;font-size:11px;padding:4px 7px"><option>Nota geral</option><option>Resumo de oitiva</option><option>Despacho</option><option>Diligência</option><option>Juntada de documento</option></select>
+    </div>
+    <div style="display:flex;gap:5px;margin-bottom:9px">
+      <input class="fc" id="nova-nota" placeholder="Registrar nota, oitiva ou observação..." style="flex:1">
+      <button class="btn btn-p" onclick="addNota()"><i class="ti ti-send"></i></button>
+    </div>
+    <div id="tl-list" class="ov-auto" style="max-height:200px"></div>
+  </div>
+</div>
+</div>
+
+<!-- Adicionar prazo específico -->
+<div class="mbd" id="m-prazo-add">
+<div class="mdl mdl-sm">
+  <div class="mh"><div class="mt"><i class="ti ti-clock-plus"></i>Adicionar prazo específico</div><button class="xb" onclick="closeM('m-prazo-add')"><i class="ti ti-x"></i></button></div>
+  <div class="mb">
+    <div class="fg"><label class="fl">Tipo de prazo</label>
+      <select class="fc" id="pa-tipo">
+        <option>Manifestação</option><option>Defesa Escrita</option><option>Recurso</option><option>Diligência</option><option>Outro</option>
+      </select>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Data início</label><input class="fc" type="date" id="pa-ini"></div>
+      <div class="fg"><label class="fl">Data limite</label><input class="fc" type="date" id="pa-fim"></div>
+    </div>
+    <div class="fg"><label class="fl">Observação</label><input class="fc" id="pa-obs" placeholder="Ex: Prazo para apresentação de defesa escrita"></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="closeM('m-prazo-add')">Cancelar</button><button class="btn btn-p" onclick="salvarPrazoExtra()"><i class="ti ti-check"></i>Adicionar</button></div>
+</div>
+</div>
+
+<!-- Juntar documento -->
+<div class="mbd" id="m-juntar">
+<div class="mdl">
+  <div class="mh"><div class="mt"><i class="ti ti-file-import"></i>Juntar documento aos autos</div><button class="xb" onclick="closeM('m-juntar')"><i class="ti ti-x"></i></button></div>
+  <div class="mb">
+    <div style="background:var(--blue-bg);border-radius:var(--r);padding:7px 11px;font-size:11px;color:var(--blue);margin-bottom:11px;display:flex;align-items:center;gap:6px">
+      <i class="ti ti-info-circle" style="font-size:13px"></i>
+      Processo: <strong id="jd-id">—</strong> · Próxima folha: <strong id="jd-fl">—</strong>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Tipo de peça</label>
+        <select class="fc" id="jd-tipo">
+          <option>Portaria instauradora</option><option>Notificação</option><option>Termo de oitiva</option>
+          <option>Depoimento de testemunha</option><option>Despacho da comissão</option>
+          <option>Documento probatório</option><option>Defesa escrita</option><option>Relatório final</option><option>Outro</option>
+        </select>
+      </div>
+      <div class="fg"><label class="fl">Data do documento</label><input class="fc" type="date" id="jd-data"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Descrição / ementa</label><input class="fc" id="jd-desc" placeholder="Ex: Termo de oitiva do servidor investigado"></div>
+      <div class="fg"><label class="fl">Nº de páginas do PDF</label><input class="fc" type="number" id="jd-pages" value="1" min="1" placeholder="1" title="Quantas páginas tem este documento?"></div>
+    </div>
+    <div class="fg"><label class="fl">Autor / responsável</label><input class="fc" id="jd-autor" placeholder="Nome e cargo"></div>
+    <div class="fg">
+      <label class="fl">ID do arquivo no Google Drive</label>
+      <input class="fc" id="jd-drive" placeholder="ID extraído da URL do arquivo no Drive">
+      <p style="font-size:10px;color:var(--tx3);margin-top:3px">URL do Drive: .../file/d/<strong>ESTE_ID</strong>/view — o arquivo será exibido no visualizador.</p>
+    </div>
+  </div>
+  <div class="mf"><button class="btn" onclick="closeM('m-juntar')">Cancelar</button><button class="btn btn-p" onclick="juntarDoc()"><i class="ti ti-check"></i>Juntar</button></div>
+</div>
+</div>
+
+<!-- Novo membro -->
+<div class="mbd" id="m-novo-membro">
+<div class="mdl mdl-sm">
+  <div class="mh"><div class="mt"><i class="ti ti-user-plus"></i>Novo membro</div><button class="xb" onclick="closeM('m-novo-membro')"><i class="ti ti-x"></i></button></div>
+  <div class="mb">
+    <div class="fg"><label class="fl">Nome completo</label><input class="fc" id="nm-nome" placeholder="Nome do servidor"></div>
+    <div class="fr2"><div class="fg"><label class="fl">Matrícula</label><input class="fc" id="nm-mat" placeholder="000000"></div><div class="fg"><label class="fl">Cargo / função</label><input class="fc" id="nm-cargo" placeholder="Analista..."></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Papel</label><select class="fc" id="nm-papel"><option>Presidente</option><option>Membro</option><option>Suplente</option></select></div><div class="fg"><label class="fl">Comissão</label><select class="fc" id="nm-com"><option>Comissão A</option><option>Comissão B</option></select></div></div>
+    <div class="fr2"><div class="fg"><label class="fl">Início mandato</label><input class="fc" type="date" id="nm-ini"></div><div class="fg"><label class="fl">Término mandato</label><input class="fc" type="date" id="nm-fim"></div></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="closeM('m-novo-membro')">Cancelar</button><button class="btn btn-p" onclick="salvarMembro()"><i class="ti ti-check"></i>Adicionar</button></div>
+</div>
+</div>
+
+<!-- Afastamento / Impedimento -->
+<div class="mbd" id="m-afastamento">
+<div class="mdl">
+  <div class="mh"><div class="mt"><i class="ti ti-calendar-off"></i>Registrar afastamento / impedimento</div><button class="xb" onclick="closeM('m-afastamento')"><i class="ti ti-x"></i></button></div>
+  <div class="mb">
+    <div class="fr2">
+      <div class="fg"><label class="fl">Membro</label>
+        <select class="fc" id="af-membro" style="font-size:12px"></select>
+      </div>
+      <div class="fg"><label class="fl">Tipo</label>
+        <select class="fc" id="af-tipo">
+          <option>Férias</option><option>Licença médica</option><option>Licença capacitação</option>
+          <option>Impedimento</option><option>Suspeição</option><option>Outro</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fl">Escopo</label>
+      <div style="display:flex;gap:12px;margin-top:4px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="radio" name="af-scope" value="geral" id="af-geral" checked onchange="toggleAfScope()"> Geral (todos os processos)</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="radio" name="af-scope" value="especifico" onchange="toggleAfScope()"> Específico (um processo)</label>
+      </div>
+    </div>
+    <div class="fg" id="af-proc-wrap" style="display:none">
+      <label class="fl">Processo específico</label>
+      <select class="fc" id="af-proc" style="font-size:12px"></select>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Data início</label><input class="fc" type="date" id="af-ini"></div>
+      <div class="fg"><label class="fl">Data término</label><input class="fc" type="date" id="af-fim"></div>
+    </div>
+    <div class="fg"><label class="fl">Substituto designado</label>
+      <select class="fc" id="af-sub" style="font-size:12px"></select>
+    </div>
+  </div>
+  <div class="mf"><button class="btn" onclick="closeM('m-afastamento')">Cancelar</button><button class="btn btn-p" onclick="salvarAfastamento()"><i class="ti ti-check"></i>Registrar</button></div>
+</div>
+</div>
+
+<!-- Adicionar testemunha -->
+<div class="mbd" id="m-testemunha">
+<div class="mdl mdl-sm">
+  <div class="mh"><div class="mt"><i class="ti ti-user-check"></i>Testemunha</div><button class="xb" onclick="closeM('m-testemunha')"><i class="ti ti-x"></i></button></div>
+  <div class="mb">
+    <div class="fg"><label class="fl">Nome completo</label><input class="fc" id="tw-nome" placeholder="Nome da testemunha"></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Qualificação</label><input class="fc" id="tw-qual" placeholder="Servidor / Externo"></div>
+      <div class="fg"><label class="fl">Contato</label><input class="fc" id="tw-cont" placeholder="E-mail ou telefone"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Data de intimação</label><input class="fc" type="date" id="tw-intim"></div>
+      <div class="fg"><label class="fl">Data de oitiva agendada</label><input class="fc" type="date" id="tw-oitiva"></div>
+    </div>
+  </div>
+  <div class="mf"><button class="btn" onclick="closeM('m-testemunha')">Cancelar</button><button class="btn btn-p" onclick="salvarTestemunha()"><i class="ti ti-check"></i>Adicionar</button></div>
+</div>
+</div>
+
+<!-- Agendar oitiva -->
+<div class="mbd" id="m-oitiva">
+<div class="mdl mdl-sm">
+  <div class="mh"><div class="mt"><i class="ti ti-calendar-plus"></i>Agendar oitiva</div><button class="xb" onclick="closeM('m-oitiva')"><i class="ti ti-x"></i></button></div>
+  <div class="mb">
+    <div class="fg"><label class="fl">Processo</label><input class="fc" id="oi-proc" readonly></div>
+    <div class="fg"><label class="fl">Pessoa a ouvir</label><input class="fc" id="oi-pessoa" placeholder="Nome da testemunha / investigado"></div>
+    <div class="fr2">
+      <div class="fg"><label class="fl">Data</label><input class="fc" type="date" id="oi-data"></div>
+      <div class="fg"><label class="fl">Horário</label><input class="fc" type="time" id="oi-hora"></div>
+    </div>
+    <div class="fg"><label class="fl">Local</label><input class="fc" id="oi-local" placeholder="Sala / endereço"></div>
+    <div class="fg"><label class="fl">Observações</label><textarea class="fc" id="oi-obs" placeholder="Pauta / assuntos a tratar..."></textarea></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="closeM('m-oitiva')">Cancelar</button><button class="btn btn-p" onclick="salvarOitiva()"><i class="ti ti-check"></i>Agendar</button></div>
+</div>
+</div><script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIG & STATE
+// ═══════════════════════════════════════════════════════════════
+let GAS_URL = localStorage.getItem('secop_gas_url') || '';
+let CFG = {
+  secretario: localStorage.getItem('secop_sec') || 'Secretário(a) da Comissão',
+  orgao: localStorage.getItem('secop_org') || 'Secretaria de Comissões Permanentes'
+};
+
+// ── FIX #1: Data real do navegador — NUNCA hardcoded ──────────
+function hoje() { return new Date(); }
+function hojeISO() { return hoje().toISOString().split('T')[0]; }
+
+// ═══════════════════════════════════════════════════════════════
+// DATA LAYER
+// ═══════════════════════════════════════════════════════════════
+let processos = [
+  {id:'PAD-001/2025',tipo:'PAD',portaria:'003/2025',objeto:'Irregularidade financeira em contrato',dataPortaria:'2025-02-10',prazo:60,comissao:'Comissão A',fase:'Relatório',adv:'Dr. Fernando Gomes (OAB/GO 12345)'},
+  {id:'SIN-007/2025',tipo:'Sindicância',portaria:'018/2025',objeto:'Abandono de cargo — setor administrativo',dataPortaria:'2025-03-04',prazo:30,comissao:'Comissão B',fase:'Relatório',adv:'Dr. Paulo Rodrigues (OAB/GO 54321)'},
+  {id:'PAD-004/2025',tipo:'PAD',portaria:'011/2025',objeto:'Desvio de conduta funcional',dataPortaria:'2025-03-09',prazo:60,comissao:'Comissão A',fase:'Instrução',adv:'Dra. Ana Lima (OAB/GO 98765)'},
+  {id:'SIN-012/2025',tipo:'Sindicância',portaria:'024/2025',objeto:'Uso indevido de bem público',dataPortaria:'2025-04-02',prazo:30,comissao:'Comissão B',fase:'Instrução',adv:'Dr. Marcos Vidal (OAB/GO 11223)'},
+  {id:'SIN-003/2025',tipo:'Sindicância',portaria:'008/2025',objeto:'Acumulação ilícita de cargos',dataPortaria:'2025-02-20',prazo:30,comissao:'Comissão B',fase:'Instrução',adv:'—'},
+  {id:'PAD-002/2025',tipo:'PAD',portaria:'005/2025',objeto:'Nepotismo em contratação',dataPortaria:'2025-01-15',prazo:60,comissao:'Comissão A',fase:'Indiciamento',adv:'Dr. Renato Alves (OAB/GO 44556)'},
+  {id:'SIN-005/2025',tipo:'Sindicância',portaria:'013/2025',objeto:'Assédio entre servidores',dataPortaria:'2025-03-18',prazo:30,comissao:'Comissão B',fase:'Oitivas',adv:'Dra. Carla Mendes (OAB/GO 66778)'},
+  {id:'SIN-009/2025',tipo:'Sindicância',portaria:'021/2025',objeto:'Assédio moral — chefia imediata',dataPortaria:'2025-04-17',prazo:30,comissao:'Comissão B',fase:'Oitivas',adv:'—'},
+  {id:'PAD-006/2025',tipo:'PAD',portaria:'015/2025',objeto:'Fraude em ponto eletrônico',dataPortaria:'2025-02-01',prazo:60,comissao:'Comissão A',fase:'Defesa',adv:'Dr. Sérgio Pinto (OAB/GO 33445)'},
+  {id:'SIN-015/2025',tipo:'Sindicância',portaria:'030/2025',objeto:'Uso de sistema sem autorização',dataPortaria:'2025-04-25',prazo:30,comissao:'Comissão B',fase:'Instrução',adv:'—'},
+];
+
+// Prazos extras por processo: [{tipo, inicio, fim, obs}]
+let prazosExtras = {};
+
+// Notas / timeline
+let notas = {
+  'PAD-001/2025':[
+    {data:'2025-02-12',tipo:'Nota geral',texto:'Processo instaurado. Documentos recebidos.'},
+    {data:'2025-03-01',tipo:'Resumo de oitiva',texto:'Oitiva do servidor investigado. Negou as irregularidades.'},
+    {data:'2025-04-10',tipo:'Despacho',texto:'Prazo original vencido. Aguardando portaria de prorrogação.'},
+  ],
+  'SIN-007/2025':[
+    {data:'2025-03-05',tipo:'Nota geral',texto:'Instauração. Notificação enviada ao servidor.'},
+    {data:'2025-03-20',tipo:'Resumo de oitiva',texto:'Servidor não compareceu. Segundo chamado agendado.'},
+  ],
+};
+
+// Autos digitais: peças por processo
+let autos = {
+  'PAD-001/2025':[
+    {folha:1,folhaInicio:1,pages:2,tipo:'Portaria instauradora',desc:'Portaria nº 003/2025 — instauração do PAD',data:'2025-02-10',autor:'Chefe da Unidade',driveId:''},
+    {folha:3,folhaInicio:3,pages:1,tipo:'Notificação',desc:'Notificação do servidor investigado',data:'2025-02-12',autor:'Comissão A',driveId:''},
+    {folha:4,folhaInicio:4,pages:3,tipo:'Termo de oitiva',desc:'Oitiva do servidor — nega as irregularidades',data:'2025-03-01',autor:'Comissão A',driveId:''},
+  ],
+  'SIN-007/2025':[
+    {folha:1,folhaInicio:1,pages:1,tipo:'Portaria instauradora',desc:'Portaria nº 018/2025',data:'2025-03-04',autor:'Chefe da Unidade',driveId:''},
+    {folha:2,folhaInicio:2,pages:1,tipo:'Notificação',desc:'Notificação do servidor para comparecimento',data:'2025-03-05',autor:'Comissão B',driveId:''},
+  ],
+};
+
+// ── FIX #2: Afastamentos com escopo geral/específico ──────────
+let afastamentos = [
+  {membro:'Sandra Figueiredo',tipo:'Licença médica',escopo:'geral',processoId:null,inicio:'2025-04-28',termino:'2025-05-20',substituto:'Tiago Carvalho',status:'Em curso'},
+  {membro:'Dr. João Luiz Pinto',tipo:'Férias',escopo:'geral',processoId:null,inicio:'2025-03-01',termino:'2025-03-30',substituto:'Paulo Ferreira',status:'Concluído'},
+  {membro:'Dr. Carlos Alberto Menezes',tipo:'Impedimento',escopo:'especifico',processoId:'PAD-001/2025',inicio:'2025-02-10',termino:'2025-12-31',substituto:'Ana Rita Costa',status:'Em curso'},
+];
+
+let membros = [
+  {nome:'Dr. Carlos Alberto Menezes',funcao:'Presidente',comissao:'A',tipo:'Titular',status:'Ativo'},
+  {nome:'Dra. Maria Paula Souza',funcao:'Membro',comissao:'A',tipo:'Titular',status:'Ativo'},
+  {nome:'Dr. João Luiz Pinto',funcao:'Membro',comissao:'A',tipo:'Titular',status:'Ativo'},
+  {nome:'Ana Rita Costa',funcao:'Membro',comissao:'A',tipo:'Suplente',status:'Ativo'},
+  {nome:'Paulo Ferreira',funcao:'Membro',comissao:'A',tipo:'Suplente',status:'Ativo'},
+  {nome:'Dra. Lúcia Rodrigues',funcao:'Presidente',comissao:'B',tipo:'Titular',status:'Ativo'},
+  {nome:'Dr. Roberto Maia',funcao:'Membro',comissao:'B',tipo:'Titular',status:'Ativo'},
+  {nome:'Sandra Figueiredo',funcao:'Membro',comissao:'B',tipo:'Titular',status:'Em licença'},
+  {nome:'Tiago Carvalho',funcao:'Membro',comissao:'B',tipo:'Suplente',status:'Ativo (substituto)'},
+  {nome:'Beatriz Inácio',funcao:'Membro',comissao:'B',tipo:'Suplente',status:'Ativo'},
+];
+
+// Testemunhas por processo
+let testemunhas = {
+  'PAD-001/2025':[
+    {nome:'José Antônio Silva',qual:'Servidor',cont:'jose@orgao.gov.br',intim:'2025-02-20',oitiva:'2025-03-01',intimado:true,realizada:true},
+    {nome:'Maria Helena Costa',qual:'Servidor',cont:'maria@orgao.gov.br',intim:'2025-02-22',oitiva:'2025-03-08',intimado:true,realizada:false},
+  ],
+};
+
+// Agenda de oitivas: [{processoId, pessoa, data, hora, local, obs}]
+let agendaOitivas = [
+  {id:'o1',processoId:'PAD-001/2025',pessoa:'Maria Helena Costa',data:'2025-03-08',hora:'14:00',local:'Sala 203',obs:'Segunda oitiva'},
+  {id:'o2',processoId:'SIN-007/2025',pessoa:'Servidor investigado',data:'2025-03-25',hora:'10:00',local:'Sala 201',obs:'Primeira oitiva'},
+];
+
+// UI state
+let curProc = null, curPeca = null, autosProc = null;
+let filtroT = 'todos', filtroS = 'todos', busca = '';
+
+// ═══════════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════════
+
+// ── FIX #1: diasRestantes usa hoje() real ─────────────────────
+function diasRestantes(p) {
+  const port = new Date(p.dataPortaria + 'T00:00:00');
+  const venc = new Date(port);
+  venc.setDate(venc.getDate() + p.prazo);
+  const diff = venc - hoje();
+  return Math.round(diff / 86400000);
+}
+
+function getStatus(p) {
+  const d = diasRestantes(p);
+  return d < 0 ? 'vencido' : d <= 7 ? 'urgente' : 'regular';
+}
+
+function diasRestantesDate(isoDate) {
+  if (!isoDate) return null;
+  const d = new Date(isoDate + 'T00:00:00');
+  return Math.round((d - hoje()) / 86400000);
+}
+
+function fmtD(s) {
+  if (!s) return '—';
+  if (s.includes('-')) return s.split('-').reverse().join('/');
+  return s;
+}
+
+function ini(nome) {
+  if (!nome) return '??';
+  return nome.split(' ')
+    .filter(w => w.length > 2)
+    .slice(0, 2)
+    .map(w => w[0].toUpperCase())
+    .join('');
+}
+
+function dotEl(p) {
+  const s = getStatus(p);
+  return `<span class="dot ${s === 'vencido' ? 'dr' : s === 'urgente' ? 'da' : 'dg'}"></span>`;
+}
+
+function stBadge(p) {
+  const d = diasRestantes(p), s = getStatus(p);
+  if (s === 'vencido') return `<span class="bdg br">${dotEl(p)} Vencido (${Math.abs(d)}d)</span>`;
+  if (s === 'urgente') return `<span class="bdg ba">${dotEl(p)} ${d}d restantes</span>`;
+  return `<span class="bdg bg">${dotEl(p)} ${d}d restantes</span>`;
+}
+
+function fbdg(f) {
+  const m = {Instauração:'bc',Instrução:'bb',Oitivas:'bb',Indiciamento:'ba',Defesa:'ba',Relatório:'bc',Julgamento:'bc',Arquivado:'bg'};
+  return `<span class="bdg ${m[f]||'bc'}">${f}</span>`;
+}
+
+function tbdg(t) {
+  return `<span class="bdg ${t === 'PAD' ? 'bb' : 'bc'}">${t}</span>`;
+}
+
+function ntColor(t) {
+  return {Despacho:'#D4860A','Resumo de oitiva':'#1A6B45',Diligência:'#8B1A1A','Juntada de documento':'#7A4F00'}[t] || '#1A4E8A';
+}
+
+// ── FIX #2: status de membro considerando escopo do afastamento
+function statusMembroNoProcesso(nomeMembro, processoId) {
+  const t = hoje();
+  const af = afastamentos.find(a => {
+    if (a.membro !== nomeMembro) return false;
+    const ini = new Date(a.inicio + 'T00:00:00');
+    const fim = new Date(a.termino + 'T00:00:00');
+    if (t < ini || t > fim) return false;
+    if (a.escopo === 'geral') return true;
+    if (a.escopo === 'especifico') return a.processoId === processoId;
+    return false;
+  });
+  return af || null;
+}
+
+function membrosAtivosNoProcesso(comissao, processoId) {
+  return membros.filter(m => m.comissao === comissao).map(m => {
+    const af = statusMembroNoProcesso(m.nome, processoId);
+    return { ...m, afastamentoAtual: af };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+function navTo(pageId, tab) {
+  // Hide all pages (including autos)
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-autos').classList.remove('active');
+  document.querySelectorAll('.ntab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(s => s.classList.remove('active'));
+
+  const sb = document.getElementById('main-sb');
+  if (pageId === 'autos') {
+    // Autos: hide sidebar so viewer gets full width
+    sb.style.display = 'none';
+    document.getElementById('page-autos').classList.add('active');
+    renderAutosPage();
+  } else {
+    sb.style.display = 'flex';
+    const pg = document.getElementById('page-' + pageId);
+    if (pg) pg.classList.add('active');
+    // Refresh instrucao select when switching to that tab
+    if (pageId === 'instrucao') {
+      renderInstrucaoSel();
+      // If a process was already selected, re-render content
+      if (document.getElementById('inst-sel').value) renderInstrucao();
+    }
+  }
+
+  const tabEl = tab || document.getElementById('tab-' + pageId);
+  if (tabEl) tabEl.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════════════
+function openM(id) { document.getElementById(id).classList.add('open'); }
+function closeM(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.mbd').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+function toast(msg, type = 'i') {
+  const icons = { s: 'ti-check', e: 'ti-alert-triangle', i: 'ti-info-circle' };
+  const t = document.createElement('div');
+  t.className = `tst t${type}`;
+  t.innerHTML = `<i class="ti ${icons[type]||'ti-info-circle'}" style="font-size:14px"></i>${msg}`;
+  document.getElementById('tc').appendChild(t);
+  setTimeout(() => t.remove(), 3400);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════
+function renderDash() {
+  const vec = processos.filter(p => getStatus(p) === 'vencido');
+  const urg = processos.filter(p => getStatus(p) === 'urgente');
+  const reg = processos.filter(p => getStatus(p) === 'regular');
+
+  document.getElementById('cnt-v').textContent = vec.length;
+  document.getElementById('cnt-u').textContent = urg.length;
+
+  // Oitivas "hoje" ou próximos 2 dias
+  const oitivasProximas = agendaOitivas.filter(o => {
+    const d = diasRestantesDate(o.data);
+    return d !== null && d >= 0 && d <= 2;
+  });
+  document.getElementById('cnt-o').textContent = oitivasProximas.length;
+
+  document.getElementById('dash-metrics').innerHTML = `
+    <div class="mc"><div class="ml">Total processos</div><div class="mv">${processos.length}</div><div class="ms">${processos.filter(p=>p.tipo==='PAD').length} PADs · ${processos.filter(p=>p.tipo==='Sindicância').length} Sind.</div></div>
+    <div class="mc"><div class="ml">Vencidos</div><div class="mv" style="color:var(--red)">${vec.length}</div><div class="ms">Ação imediata</div></div>
+    <div class="mc"><div class="ml">Urgentes (≤7d)</div><div class="mv" style="color:var(--amber)">${urg.length}</div><div class="ms">Prorrogar urgente</div></div>
+    <div class="mc"><div class="ml">Regulares</div><div class="mv" style="color:var(--green)">${reg.length}</div><div class="ms">Dentro do prazo</div></div>`;
+
+  // Chart
+  const fases = {Instrução:0,Oitivas:0,Indiciamento:0,Defesa:0,Relatório:0,Julgamento:0};
+  processos.forEach(p => { if (fases[p.fase] !== undefined) fases[p.fase]++; });
+  const cors = {Instrução:'#1A4E8A',Oitivas:'#378ADD',Indiciamento:'#D4860A',Defesa:'#854F0B',Relatório:'#5C5A55',Julgamento:'#2C2C2A'};
+  const maxV = Math.max(...Object.values(fases), 1);
+  document.getElementById('chart-fase').innerHTML = Object.entries(fases).map(([f, v]) => {
+    const h = Math.round((v / maxV) * 62) + 4;
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1"><span style="font-size:9px;font-weight:500;color:var(--tx2)">${v}</span><div style="width:100%;height:${h}px;border-radius:2px 2px 0 0;background:${cors[f]}"></div><span style="font-size:9px;color:var(--tx3);text-align:center">${f.substring(0,5)}</span></div>`;
+  }).join('');
+
+  // Alertas
+  const alertas = [...vec, ...urg].slice(0, 5);
+  document.getElementById('dash-alertas').innerHTML = alertas.length
+    ? alertas.map(p => `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bdr-s);cursor:pointer;font-size:11px" onclick="openDetalhe('${p.id}')">${dotEl(p)}<span style="font-family:var(--mono);font-weight:500;color:var(--blue);min-width:90px">${p.id}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2)">${p.objeto}</span>${stBadge(p)}</div>`).join('')
+    : '<div class="es" style="padding:8px"><i class="ti ti-shield-check" style="font-size:18px;color:var(--green)"></i>Sem alertas.</div>';
+
+  // Lista
+  document.getElementById('dash-tb').innerHTML = processos.slice(0, 7).map(p =>
+    `<tr onclick="openDetalhe('${p.id}')"><td>${dotEl(p)}</td><td style="font-family:var(--mono);font-size:11px;color:var(--blue)">${p.portaria}</td><td>${tbdg(p.tipo)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.objeto}</td><td>${fbdg(p.fase)}</td><td>${stBadge(p)}</td></tr>`
+  ).join('');
+
+  // Próximas oitivas
+  const prox = [...agendaOitivas].sort((a,b) => a.data.localeCompare(b.data)).slice(0,5);
+  document.getElementById('dash-oitivas').innerHTML = prox.length
+    ? prox.map(o => {
+        const d = diasRestantesDate(o.data);
+        const alerta = d !== null && d <= 2 && d >= 0;
+        return `<div class="orow" style="border-bottom:1px solid var(--bdr-s)">
+          <div><div style="font-size:11px;font-weight:500">${o.pessoa}</div><div style="font-size:10px;color:var(--blue);font-family:var(--mono)">${o.processoId}</div></div>
+          <div style="font-size:11px;font-family:var(--mono)">${fmtD(o.data)} ${o.hora}</div>
+          <div style="font-size:11px;color:var(--tx3)">${o.local}</div>
+          <div>${alerta ? `<span class="bdg ba"><i class="ti ti-clock-exclamation" style="font-size:10px"></i>${d === 0 ? 'Hoje' : d + 'd'}</span>` : `<span class="bdg bc">${d !== null ? d + 'd' : '—'}</span>`}</div>
+        </div>`;
+      }).join('')
+    : '<div class="es" style="padding:8px 0"><i class="ti ti-calendar" style="font-size:18px"></i>Nenhuma oitiva agendada.</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROCESSOS
+// ═══════════════════════════════════════════════════════════════
+function renderProc() {
+  const lista = processos.filter(p => {
+    if (filtroT !== 'todos' && p.tipo !== filtroT) return false;
+    if (filtroS !== 'todos' && getStatus(p) !== filtroS) return false;
+    if (busca && !p.id.toLowerCase().includes(busca) && !p.objeto.toLowerCase().includes(busca) && !p.portaria.toLowerCase().includes(busca)) return false;
+    return true;
+  });
+  document.getElementById('proc-tb').innerHTML = lista.length
+    ? lista.map(p =>
+        `<tr onclick="openDetalhe('${p.id}')">
+          <td>${dotEl(p)}</td>
+          <td style="font-family:var(--mono);font-size:11px">${p.portaria}</td>
+          <td style="font-family:var(--mono);font-size:11px;color:var(--blue)">${p.id}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.objeto}</td>
+          <td>${fbdg(p.fase)}</td>
+          <td style="font-size:11px;color:var(--tx2)">${p.comissao}</td>
+          <td>${stBadge(p)}</td>
+          <td><button class="btn btn-sm btn-g" onclick="event.stopPropagation();abrirAutosProc('${p.id}')"><i class="ti ti-book-2"></i></button></td>
+        </tr>`
+      ).join('')
+    : '<tr><td colspan="8" class="es">Nenhum processo encontrado.</td></tr>';
+}
+
+function setF(btn, dim, val) {
+  if (dim === 't') filtroT = val;
+  else filtroS = val;
+  document.querySelectorAll(`#fb-${dim} .fbtn`).forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderProc();
+}
+
+function buscar(v) { busca = v.toLowerCase(); renderProc(); }
+
+// ═══════════════════════════════════════════════════════════════
+// PRAZOS
+// ═══════════════════════════════════════════════════════════════
+function renderPrazos() {
+  const vec = processos.filter(p => getStatus(p) === 'vencido').length;
+  const urg = processos.filter(p => getStatus(p) === 'urgente').length;
+  const reg = processos.filter(p => getStatus(p) === 'regular').length;
+  document.getElementById('prazo-mg').innerHTML = `
+    <div class="mc"><div class="ml">Dentro do prazo</div><div class="mv" style="color:var(--green)">${reg}</div></div>
+    <div class="mc"><div class="ml">Urgente ≤7d</div><div class="mv" style="color:var(--amber)">${urg}</div></div>
+    <div class="mc"><div class="ml">Vencidos</div><div class="mv" style="color:var(--red)">${vec}</div></div>
+    <div class="mc"><div class="ml">Total</div><div class="mv">${processos.length}</div></div>`;
+
+  const sorted = [...processos].sort((a, b) => diasRestantes(a) - diasRestantes(b));
+  document.getElementById('prazo-tb').innerHTML = sorted.map(p => {
+    const d = diasRestantes(p), s = getStatus(p);
+    const pct = Math.round(Math.max(0, Math.min(100, ((p.prazo - d) / p.prazo) * 100)));
+    const cor = s === 'vencido' ? 'var(--red)' : s === 'urgente' ? '#D4860A' : 'var(--green)';
+    const extras = (prazosExtras[p.id] || []).map(pe => {
+      const dr = diasRestantesDate(pe.fim);
+      const cls = dr === null ? 'bc' : dr < 0 ? 'br' : dr <= 3 ? 'ba' : 'bc';
+      return `<span class="bdg ${cls}" style="margin-right:3px">${pe.tipo}: ${fmtD(pe.fim)}</span>`;
+    }).join('');
+    return `<tr onclick="openDetalhe('${p.id}')">
+      <td style="font-family:var(--mono);font-size:11px;color:var(--blue)">${p.id}</td>
+      <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.objeto}</td>
+      <td style="font-family:var(--mono);font-size:11px">${fmtD(p.dataPortaria)}</td>
+      <td><span class="bdg bc">${p.prazo}d</span></td>
+      <td style="min-width:100px"><div class="pb"><div class="pf" style="width:${pct}%;background:${cor}"></div></div><span style="font-size:9px;color:var(--tx3)">${pct}%</span></td>
+      <td>${stBadge(p)}</td>
+      <td style="font-size:11px">${extras || '<span style="color:var(--tx3)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INSTRUÇÃO — testemunhas + agenda
+// ═══════════════════════════════════════════════════════════════
+function renderInstrucaoSel() {
+  const sel = document.getElementById('inst-sel');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Selecione um processo —</option>' +
+    processos.map(p => `<option value="${p.id}" ${cur === p.id ? 'selected' : ''}>${p.id} — ${p.objeto.substring(0, 42)}</option>`).join('');
+  if (cur && processos.find(p => p.id === cur)) {
+    sel.value = cur;
+  }
+}
+
+function membrosAtivosNoProcesso(comissaoNome, processoId) {
+  // Accept both "Comissão A" and "A"
+  const letra = comissaoNome.length === 1 ? comissaoNome : comissaoNome.slice(-1);
+  return membros.filter(m => m.comissao === letra).map(m => {
+    const af = statusMembroNoProcesso(m.nome, processoId);
+    return { ...m, afastamentoAtual: af };
+  });
+}
+
+function renderInstrucao() {
+  const id = document.getElementById('inst-sel').value;
+  if (!id) {
+    document.getElementById('inst-content').innerHTML = '<div class="es"><i class="ti ti-list-check"></i>Selecione um processo.</div>';
+    return;
+  }
+  curProc = id; // always sync curProc with dropdown
+  const p = processos.find(x => x.id === id);
+  if (!p) return;
+  const tws = testemunhas[id] || [];
+  const oits = agendaOitivas.filter(o => o.processoId === id);
+  const pex = prazosExtras[id] || [];
+  const memAtivos = membrosAtivosNoProcesso(p.comissao, id);
+
+  document.getElementById('inst-content').innerHTML = `
+    <!-- Membros ativos neste processo -->
+    <div class="card">
+      <div class="ch"><div class="ct"><i class="ti ti-users"></i>Membros ativos em ${p.id}</div></div>
+      <div class="cb" style="display:flex;gap:6px;flex-wrap:wrap">
+        ${memAtivos.map(m => {
+          const af = m.afastamentoAtual;
+          const badge = af
+            ? `<span class="bdg ba" style="font-size:10px">${af.escopo === 'especifico' ? 'Impedido neste proc.' : 'Afastado'}</span>`
+            : `<span class="bdg bg" style="font-size:10px">Ativo</span>`;
+          return `<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--bg);border-radius:var(--r);border:1px solid var(--bdr-s)">
+            <div style="width:22px;height:22px;border-radius:50%;background:var(--blue-lt);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--blue)">${ini(m.nome)}</div>
+            <span style="font-size:11px;font-weight:500">${m.nome}</span>${badge}
+            ${af ? `<span style="font-size:10px;color:var(--tx3)">Sub: ${af.substituto}</span>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Prazos específicos -->
+    <div class="card">
+      <div class="ch">
+        <div class="ct"><i class="ti ti-clock-plus"></i>Prazos específicos</div>
+        <button class="btn btn-sm btn-p" onclick="curProc='${id}';openM('m-prazo-add')"><i class="ti ti-plus"></i>Adicionar prazo</button>
+      </div>
+      <div class="cb">
+        ${pex.length ? `<table class="tbl"><thead><tr><th>Tipo</th><th>Início</th><th>Limite</th><th>Restante</th><th>Obs.</th><th></th></tr></thead><tbody>
+          ${pex.map((pe, i) => {
+            const dr = diasRestantesDate(pe.fim);
+            const cls = dr === null ? 'bc' : dr < 0 ? 'br' : dr <= 3 ? 'ba' : 'bc';
+            return `<tr><td style="font-weight:500">${pe.tipo}</td><td style="font-family:var(--mono);font-size:11px">${fmtD(pe.inicio)}</td><td style="font-family:var(--mono);font-size:11px">${fmtD(pe.fim)}</td><td><span class="bdg ${cls}">${dr !== null ? (dr < 0 ? 'Vencido ' + Math.abs(dr) + 'd' : dr + 'd') : '—'}</span></td><td style="font-size:11px;color:var(--tx2)">${pe.obs||'—'}</td><td><button class="btn btn-sm btn-d" onclick="deletarPrazoExtra('${id}',${i})"><i class="ti ti-trash"></i></button></td></tr>`;
+          }).join('')}
+        </tbody></table>`
+        : '<div class="es" style="padding:8px 0"><i class="ti ti-clock" style="font-size:18px"></i>Nenhum prazo específico registrado.</div>'}
+      </div>
+    </div>
+
+    <!-- Testemunhas -->
+    <div class="card">
+      <div class="ch">
+        <div class="ct"><i class="ti ti-user-check"></i>Testemunhas</div>
+        <button class="btn btn-sm btn-p" onclick="curProc='${id}';openM('m-testemunha')"><i class="ti ti-plus"></i>Adicionar</button>
+      </div>
+      <div class="cb">
+        ${tws.length ? `
+          <div style="font-size:11px;font-weight:500;color:var(--tx3);margin-bottom:6px;display:grid;grid-template-columns:1fr 90px 100px 90px 90px 28px;gap:6px;padding:0 0 4px;border-bottom:1px solid var(--bdr)">
+            <div>Nome</div><div>Qualificação</div><div>Contato</div><div>Intimada</div><div>Oitiva realizada</div><div></div>
+          </div>
+          ${tws.map((tw, i) => `
+            <div class="wrow" style="grid-template-columns:1fr 90px 100px 90px 90px 28px">
+              <div>
+                <div style="font-weight:500">${tw.nome}</div>
+                <div style="font-size:10px;color:var(--tx3)">Oitiva: ${fmtD(tw.oitiva)} ${tw.oitiva ? (diasRestantesDate(tw.oitiva) !== null ? (diasRestantesDate(tw.oitiva) < 0 ? '(passada)' : diasRestantesDate(tw.oitiva) + 'd') : '') : ''}</div>
+              </div>
+              <div style="font-size:11px;color:var(--tx2)">${tw.qual}</div>
+              <div style="font-size:11px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis">${tw.cont||'—'}</div>
+              <div><input type="checkbox" ${tw.intimado?'checked':''} onchange="toggleTW('${id}',${i},'intimado',this.checked)"> <span style="font-size:11px">${tw.intimado?'Sim':'Não'}</span></div>
+              <div><input type="checkbox" ${tw.realizada?'checked':''} onchange="toggleTW('${id}',${i},'realizada',this.checked)"> <span style="font-size:11px">${tw.realizada?'Realizada':'Pendente'}</span></div>
+              <div><button class="btn btn-sm btn-d" onclick="deletarTW('${id}',${i})"><i class="ti ti-trash"></i></button></div>
+            </div>`).join('')}
+        ` : '<div class="es" style="padding:8px 0"><i class="ti ti-user-check" style="font-size:18px"></i>Nenhuma testemunha arrolada.</div>'}
+      </div>
+    </div>
+
+    <!-- Agenda de oitivas -->
+    <div class="card">
+      <div class="ch">
+        <div class="ct"><i class="ti ti-calendar-event"></i>Agenda de oitivas</div>
+        <button class="btn btn-sm btn-p" onclick="prepOitiva('${id}')"><i class="ti ti-plus"></i>Agendar</button>
+      </div>
+      <div class="cb">
+        ${oits.length ? oits.sort((a,b)=>a.data.localeCompare(b.data)).map((o, i) => {
+          const dr = diasRestantesDate(o.data);
+          const alerta = dr !== null && dr >= 0 && dr <= 2;
+          return `<div class="orow">
+            <div><div style="font-weight:500">${o.pessoa}</div><div style="font-size:10px;color:var(--tx3)">${o.obs||''}</div></div>
+            <div style="font-family:var(--mono);font-size:11px">${fmtD(o.data)} ${o.hora}</div>
+            <div style="font-size:11px;color:var(--tx2)">${o.local}</div>
+            <div style="display:flex;gap:4px;align-items:center">
+              ${alerta ? `<span class="bdg ba">${dr === 0 ? 'Hoje' : dr + 'd'}</span>` : `<span class="bdg bc">${dr !== null ? (dr < 0 ? 'Passada' : dr + 'd') : '—'}</span>`}
+              <button class="btn btn-sm btn-d" onclick="deletarOitiva('${o.id}','${id}')"><i class="ti ti-trash"></i></button>
+            </div>
+          </div>`;
+        }).join('')
+        : '<div class="es" style="padding:8px 0"><i class="ti ti-calendar" style="font-size:18px"></i>Nenhuma oitiva agendada.</div>'}
+      </div>
+    </div>`;
+}
+
+function toggleTW(procId, idx, campo, val) {
+  if (testemunhas[procId] && testemunhas[procId][idx]) {
+    testemunhas[procId][idx][campo] = val;
+    toast('Atualizado', 's');
+    renderInstrucao();
+  }
+}
+
+function deletarTW(procId, idx) {
+  if (!confirm('Remover testemunha?')) return;
+  testemunhas[procId].splice(idx, 1);
+  renderInstrucao();
+  toast('Testemunha removida', 's');
+}
+
+function deletarPrazoExtra(procId, idx) {
+  if (!confirm('Remover prazo?')) return;
+  prazosExtras[procId].splice(idx, 1);
+  renderInstrucao();
+  renderPrazos();
+  toast('Prazo removido', 's');
+}
+
+function deletarOitiva(id, procId) {
+  if (!confirm('Remover oitiva?')) return;
+  agendaOitivas = agendaOitivas.filter(o => o.id !== id);
+  renderInstrucao();
+  renderDash();
+  toast('Oitiva removida', 's');
+}
+
+function prepOitiva(procId) {
+  document.getElementById('oi-proc').value = procId;
+  openM('m-oitiva');
+}
+
+function salvarTestemunha() {
+  const procId = document.getElementById('inst-sel').value || curProc;
+  if (!procId) { toast('Selecione um processo na aba Instrução', 'e'); return; }
+  const nome = document.getElementById('tw-nome').value.trim();
+  if (!nome) { toast('Informe o nome', 'e'); return; }
+  if (!testemunhas[procId]) testemunhas[procId] = [];
+  testemunhas[procId].push({
+    nome, qual: document.getElementById('tw-qual').value,
+    cont: document.getElementById('tw-cont').value,
+    intim: document.getElementById('tw-intim').value,
+    oitiva: document.getElementById('tw-oitiva').value,
+    intimado: false, realizada: false
+  });
+  closeM('m-testemunha');
+  ['tw-nome','tw-qual','tw-cont','tw-intim','tw-oitiva'].forEach(id => document.getElementById(id).value = '');
+  renderInstrucao();
+  toast('Testemunha adicionada', 's');
+}
+
+function salvarOitiva() {
+  const procId = document.getElementById('oi-proc').value;
+  const pessoa = document.getElementById('oi-pessoa').value.trim();
+  const data = document.getElementById('oi-data').value;
+  if (!pessoa || !data) { toast('Preencha pessoa e data', 'e'); return; }
+  agendaOitivas.push({
+    id: 'o' + Date.now(), processoId: procId, pessoa,
+    data, hora: document.getElementById('oi-hora').value,
+    local: document.getElementById('oi-local').value,
+    obs: document.getElementById('oi-obs').value
+  });
+  closeM('m-oitiva');
+  ['oi-pessoa','oi-data','oi-hora','oi-local','oi-obs'].forEach(id => document.getElementById(id).value = '');
+  renderInstrucao();
+  renderDash();
+  toast('Oitiva agendada', 's');
+}
+
+function salvarPrazoExtra() {
+  const procId = document.getElementById('inst-sel').value || curProc;
+  if (!procId) { toast('Selecione um processo na aba Instrução', 'e'); return; }
+  const fim = document.getElementById('pa-fim').value;
+  if (!fim) { toast('Informe a data limite', 'e'); return; }
+  if (!prazosExtras[procId]) prazosExtras[procId] = [];
+  prazosExtras[procId].push({
+    tipo: document.getElementById('pa-tipo').value,
+    inicio: document.getElementById('pa-ini').value,
+    fim, obs: document.getElementById('pa-obs').value
+  });
+  closeM('m-prazo-add');
+  ['pa-ini','pa-fim','pa-obs'].forEach(id => document.getElementById(id).value = '');
+  renderPrazos();
+  renderInstrucao();
+  toast('Prazo adicionado', 's');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COMISSÕES
+// ═══════════════════════════════════════════════════════════════
+function renderComissoes() {
+  const sbg = {Ativo:'bg','Em licença':'ba','Ativo (substituto)':'bgold'};
+  document.getElementById('comissoes-grid').innerHTML = ['A','B'].map(c => {
+    const ms = membros.filter(m => m.comissao === c);
+    const pres = ms.find(m => m.funcao === 'Presidente');
+    const outros = ms.filter(m => m.funcao !== 'Presidente');
+    return `<div class="card">
+      <div class="ch"><div class="ct"><i class="ti ti-users"></i>Comissão ${c} — ${c === 'A' ? 'PAD' : 'Sindicância'}</div>
+        <a href="https://docs.google.com/spreadsheets/d/1z5SHfcx-RPEVFMQKwlACNfTYB4VVl9hJfeDcwvgkeyA/edit" target="_blank" class="btn btn-sm"><i class="ti ti-external-link"></i></a>
+      </div>
+      <div class="cb">
+        ${pres ? `<div style="font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Presidente</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--blue-lt);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--blue)">${ini(pres.nome)}</div>
+            <span style="font-size:12px;font-weight:500">${pres.nome}</span><span class="bdg bb">Titular</span>
+          </div>` : ''}
+        <div style="font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Membros</div>
+        ${outros.map(m => `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+          <div style="width:22px;height:22px;border-radius:50%;background:var(--blue-lt);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--blue)">${ini(m.nome)}</div>
+          <span style="font-size:12px;flex:1">${m.nome}</span><span class="bdg ${sbg[m.status]||'bc'}" style="font-size:10px">${m.tipo}</span>
+        </div>`).join('')}
+        <div class="divider"></div>
+        <div style="font-size:10px;color:var(--tx3)">Mandato: 01/01/2025 – 31/12/2025</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('aft-tb').innerHTML = afastamentos.map((a, i) => `
+    <tr>
+      <td style="font-weight:500">${a.membro}</td>
+      <td>${a.tipo}</td>
+      <td>${a.escopo === 'geral' ? '<span class="bdg bc">Geral</span>' : `<span class="bdg ba">Específico<br><span style="font-size:9px">${a.processoId||''}</span></span>`}</td>
+      <td style="font-family:var(--mono);font-size:11px">${fmtD(a.inicio)}</td>
+      <td style="font-family:var(--mono);font-size:11px">${fmtD(a.termino)}</td>
+      <td>${a.substituto}</td>
+      <td><span class="bdg ${a.status === 'Em curso' ? 'ba' : 'bg'}">${a.status}</span></td>
+    </tr>`).join('') || '<tr><td colspan="7" class="es">Nenhum registro.</td></tr>';
+}
+
+function toggleAfScope() {
+  const especifico = document.querySelector('input[name="af-scope"]:checked').value === 'especifico';
+  document.getElementById('af-proc-wrap').style.display = especifico ? 'block' : 'none';
+}
+
+function populateAfForm() {
+  document.getElementById('af-membro').innerHTML = membros.map(m => `<option>${m.nome}</option>`).join('');
+  document.getElementById('af-sub').innerHTML = membros.map(m => `<option>${m.nome}</option>`).join('');
+  document.getElementById('af-proc').innerHTML = processos.map(p => `<option value="${p.id}">${p.id} — ${p.objeto.substring(0,40)}</option>`).join('');
+}
+
+function salvarAfastamento() {
+  const escopo = document.querySelector('input[name="af-scope"]:checked').value;
+  const af = {
+    membro: document.getElementById('af-membro').value,
+    tipo: document.getElementById('af-tipo').value,
+    escopo,
+    processoId: escopo === 'especifico' ? document.getElementById('af-proc').value : null,
+    inicio: document.getElementById('af-ini').value,
+    termino: document.getElementById('af-fim').value,
+    substituto: document.getElementById('af-sub').value,
+    status: 'Em curso'
+  };
+  if (!af.inicio || !af.termino) { toast('Informe as datas', 'e'); return; }
+  afastamentos.push(af);
+  closeM('m-afastamento');
+  renderComissoes();
+  toast('Afastamento registrado', 's');
+}
+
+function salvarMembro() {
+  const nome = document.getElementById('nm-nome').value.trim();
+  if (!nome) { toast('Informe o nome', 'e'); return; }
+  membros.push({
+    nome, funcao: document.getElementById('nm-papel').value,
+    comissao: document.getElementById('nm-com').value.slice(-1),
+    tipo: document.getElementById('nm-papel').value === 'Suplente' ? 'Suplente' : 'Titular',
+    status: 'Ativo'
+  });
+  closeM('m-novo-membro');
+  renderComissoes();
+  toast('Membro adicionado', 's');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PENDÊNCIAS
+// ═══════════════════════════════════════════════════════════════
+function renderPendencias() {
+  const vec = processos.filter(p => getStatus(p) === 'vencido');
+  const urg = processos.filter(p => getStatus(p) === 'urgente');
+  document.getElementById('pend-count').textContent = `${vec.length + urg.length} pendências`;
+
+  let html = '';
+  if (vec.length) {
+    html += `<div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:6px;display:flex;align-items:center;gap:5px"><i class="ti ti-flame"></i>CRÍTICO — Prazo vencido</div>`;
+    vec.forEach(p => {
+      const d = Math.abs(diasRestantes(p));
+      html += `<div class="pcard pc-r"><div class="pc-h"><span class="dot dr"></span><span style="font-size:12px;font-weight:500;flex:1">${p.id} — ${p.objeto}</span><span class="bdg br">+${d}d</span><button class="btn btn-sm" onclick="openDetalhe('${p.id}')"><i class="ti ti-arrow-right"></i></button></div><div class="pc-b">Portaria ${p.portaria} · ${p.comissao} · Fase: ${p.fase}</div></div>`;
+    });
+  }
+  if (urg.length) {
+    html += `<div style="font-size:11px;font-weight:600;color:var(--amber);margin:12px 0 6px;display:flex;align-items:center;gap:5px"><i class="ti ti-clock-exclamation"></i>URGENTE — Vence em ≤ 7 dias</div>`;
+    urg.forEach(p => {
+      const d = diasRestantes(p);
+      html += `<div class="pcard pc-a"><div class="pc-h"><span class="dot da"></span><span style="font-size:12px;font-weight:500;flex:1">${p.id} — ${p.objeto}</span><span class="bdg ba">${d}d</span><button class="btn btn-sm" onclick="openDetalhe('${p.id}')"><i class="ti ti-arrow-right"></i></button></div><div class="pc-b">Portaria ${p.portaria} · ${p.comissao} · Fase: ${p.fase}</div></div>`;
+    });
+  }
+
+  // Prazos extras vencendo
+  const pexAlert = [];
+  Object.entries(prazosExtras).forEach(([pid, pex]) => {
+    pex.forEach(pe => {
+      const dr = diasRestantesDate(pe.fim);
+      if (dr !== null && dr <= 3) pexAlert.push({ pid, pe, dr });
+    });
+  });
+  if (pexAlert.length) {
+    html += `<div style="font-size:11px;font-weight:600;color:var(--amber);margin:12px 0 6px;display:flex;align-items:center;gap:5px"><i class="ti ti-clock-bolt"></i>Prazos específicos vencendo</div>`;
+    pexAlert.forEach(({ pid, pe, dr }) => {
+      html += `<div class="pcard pc-a"><div class="pc-h"><span class="dot da"></span><span style="font-size:12px;font-weight:500;flex:1">${pid} — ${pe.tipo}</span><span class="bdg ${dr < 0 ? 'br' : 'ba'}">${dr < 0 ? 'Vencido ' + Math.abs(dr) + 'd' : dr + 'd'}</span></div><div class="pc-b">Limite: ${fmtD(pe.fim)} · ${pe.obs||''}</div></div>`;
+    });
+  }
+
+  if (!html) html = '<div class="card"><div class="es"><i class="ti ti-shield-check" style="font-size:28px;color:var(--green)"></i>Nenhuma pendência crítica.</div></div>';
+  document.getElementById('pend-content').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GRATIFICAÇÃO
+// ═══════════════════════════════════════════════════════════════
+function renderGratificacao() {
+  const t = hoje();
+  const mes = t.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  document.getElementById('grat-per').textContent = mes;
+  const grat = [
+    {nome:'Dr. Carlos Alberto Menezes',funcao:'Presidente',diasUteis:22,afastado:0},
+    {nome:'Dra. Maria Paula Souza',funcao:'Membro',diasUteis:22,afastado:0},
+    {nome:'Dr. João Luiz Pinto',funcao:'Membro',diasUteis:22,afastado:22},
+    {nome:'Ana Rita Costa',funcao:'Suplente ativo',diasUteis:22,afastado:0},
+    {nome:'Dra. Lúcia Rodrigues',funcao:'Presidente',diasUteis:22,afastado:0},
+    {nome:'Dr. Roberto Maia',funcao:'Membro',diasUteis:22,afastado:0},
+    {nome:'Sandra Figueiredo',funcao:'Membro',diasUteis:22,afastado:10},
+    {nome:'Tiago Carvalho',funcao:'Suplente ativo',diasUteis:22,afastado:0},
+  ];
+  document.getElementById('grat-tb').innerHTML = grat.map(m => {
+    const ef = m.diasUteis - m.afastado;
+    const pct = Math.round((ef / m.diasUteis) * 100);
+    const ok = pct >= 50;
+    return `<tr>
+      <td style="font-weight:500">${m.nome}</td><td>${m.funcao}</td>
+      <td style="text-align:center">${m.diasUteis}</td>
+      <td style="text-align:center;color:${m.afastado>0?'var(--amber)':'var(--tx2)'}">${m.afastado}</td>
+      <td style="text-align:center;font-weight:500">${ef}</td>
+      <td style="min-width:80px"><div class="pb"><div class="pf" style="width:${pct}%;background:${ok?'var(--green)':'var(--red)'}"></div></div><span style="font-size:9px;color:${ok?'var(--green)':'var(--red)'}">${pct}%</span></td>
+      <td><span class="bdg ${ok?'bg':'br'}">${ok?'Apto':'Proporcional'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DETALHE PROCESSO
+// ═══════════════════════════════════════════════════════════════
+function openDetalhe(id) {
+  const p = processos.find(x => x.id === id);
+  if (!p) return;
+  curProc = id;
+  document.getElementById('d-title').innerHTML = `<i class="ti ti-file-description"></i>${p.id} — ${p.tipo}`;
+  const fases = ['Instauração','Instrução','Oitivas','Indiciamento','Defesa','Relatório','Julgamento','Arquivado'];
+  document.getElementById('d-meta').innerHTML = `
+    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px"><div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Portaria</div><div style="font-size:12px;font-weight:500;font-family:var(--mono)">${p.portaria}</div></div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px">
+      <div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Fase (clique para alterar)</div>
+      <select class="fc" style="font-size:12px;padding:4px 7px" onchange="alterarFase('${id}',this.value)">
+        ${fases.map(f => `<option value="${f}" ${f === p.fase ? 'selected' : ''}>${f}</option>`).join('')}
+      </select>
+    </div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px"><div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Status prazo</div>${stBadge(p)}</div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px"><div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Comissão</div><div style="font-size:12px">${p.comissao}</div></div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px"><div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Data portaria</div><div style="font-size:12px;font-family:var(--mono)">${fmtD(p.dataPortaria)}</div></div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px">
+      <div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Advogado</div>
+      <input class="fc" style="font-size:11px;padding:3px 6px" value="${p.adv}" onchange="alterarAdv('${id}',this.value)" title="Clique para editar">
+    </div>`;
+  renderTimeline(id);
+  openM('m-detalhe');
+}
+
+function alterarFase(id, novaFase) {
+  const p = processos.find(x => x.id === id);
+  if (!p) return;
+  p.fase = novaFase;
+  if (GAS_URL) fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'updateProcesso', data: { id, fase: novaFase } }) }).catch(() => {});
+  renderAll();
+  toast(`Fase atualizada → ${novaFase}`, 's');
+}
+
+function alterarAdv(id, novoAdv) {
+  const p = processos.find(x => x.id === id);
+  if (!p) return;
+  p.adv = novoAdv;
+  if (GAS_URL) fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'updateProcesso', data: { id, adv: novoAdv } }) }).catch(() => {});
+  toast('Advogado atualizado', 's');
+}
+
+function renderTimeline(id) {
+  const ns = notas[id] || [];
+  document.getElementById('tl-list').innerHTML = ns.length
+    ? [...ns].reverse().map(n => `<div class="tli"><div style="width:7px;height:7px;border-radius:50%;background:${ntColor(n.tipo)};margin-top:4px;flex-shrink:0"></div><div style="flex:1"><div class="tld">${fmtD(n.data)} · <span style="font-weight:500;color:${ntColor(n.tipo)}">${n.tipo}</span></div><div class="tlt">${n.texto}</div></div></div>`).join('')
+    : '<div class="es" style="padding:8px 0">Nenhuma nota registrada.</div>';
+}
+
+function addNota() {
+  const txt = document.getElementById('nova-nota').value.trim();
+  if (!txt || !curProc) return;
+  const tipo = document.getElementById('nota-tipo').value;
+  if (!notas[curProc]) notas[curProc] = [];
+  notas[curProc].push({ data: hojeISO(), tipo, texto: txt });
+  document.getElementById('nova-nota').value = '';
+  renderTimeline(curProc);
+  if (GAS_URL) fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'addNota', data: { processoId: curProc, data: hojeISO(), tipo, texto: txt } }) }).catch(() => {});
+  toast('Nota registrada', 's');
+}
+
+function deletarProc() {
+  if (!curProc || !confirm(`Excluir ${curProc}?`)) return;
+  processos = processos.filter(p => p.id !== curProc);
+  if (GAS_URL) fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteProcesso', data: { id: curProc } }) }).catch(() => {});
+  closeM('m-detalhe');
+  renderAll();
+  toast('Processo excluído', 's');
+}
+
+function salvarProc() {
+  const tipo = document.getElementById('np-tipo').value;
+  const portaria = document.getElementById('np-port').value.trim();
+  const objeto = document.getElementById('np-obj').value.trim();
+  const data = document.getElementById('np-data').value;
+  if (!portaria || !objeto || !data) { toast('Preencha portaria, objeto e data', 'e'); return; }
+  const prefix = tipo === 'PAD' ? 'PAD' : 'SIN';
+  const id = `${prefix}-${String(processos.length + 1).padStart(3, '0')}/${new Date().getFullYear()}`;
+  const p = { id, tipo, portaria, objeto, dataPortaria: data, prazo: tipo === 'PAD' ? 60 : 30, comissao: document.getElementById('np-com').value, fase: document.getElementById('np-fase').value, adv: document.getElementById('np-adv').value || '—' };
+  const obs = document.getElementById('np-obs').value;
+  if (obs) notas[id] = [{ data: hojeISO(), tipo: 'Nota geral', texto: obs }];
+  processos.unshift(p);
+  if (GAS_URL) fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'addProcesso', data: { ...p, obs } }) }).catch(() => {});
+  closeM('m-novo-proc');
+  ['np-port','np-obj','np-data','np-adv','np-obs'].forEach(id => document.getElementById(id).value = '');
+  renderAll();
+  toast(`Processo ${id} registrado`, 's');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTOS DIGITAIS — FIX #3: Layout full-screen, iframe Drive
+// ═══════════════════════════════════════════════════════════════
+function renderAutosPage() {
+  const lista = document.getElementById('autos-proc-list');
+  lista.innerHTML = processos.map(p => {
+    const qtd = (autos[p.id] || []).length;
+    return `<div class="ap-item ${autosProc === p.id ? 'active' : ''}" onclick="selAutosProc('${p.id}')">
+      <div class="ap-id">${p.id}</div>
+      <div class="ap-obj">${p.objeto}</div>
+      <div style="display:flex;align-items:center;gap:4px;margin-top:2px">${fbdg(p.fase)}<span style="font-size:10px;color:var(--tx3);margin-left:auto">${qtd} fl.</span></div>
+    </div>`;
+  }).join('') || '<div class="es">Nenhum processo.</div>';
+
+  if (autosProc) selAutosProc(autosProc);
+}
+
+function filtrarProcAutos(v) {
+  document.querySelectorAll('.ap-item').forEach(el => {
+    el.style.display = el.textContent.toLowerCase().includes(v.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function selAutosProc(id) {
+  autosProc = id;
+  curPeca = null;
+  document.querySelectorAll('.ap-item').forEach(el => {
+    el.classList.toggle('active', el.querySelector('.ap-id')?.textContent === id);
+  });
+  const p = processos.find(x => x.id === id);
+  document.getElementById('autos-proc-title').textContent = p ? p.id : '—';
+  document.getElementById('pec-fase').textContent = p ? p.fase : '';
+  document.getElementById('jd-id').textContent = id;
+  document.getElementById('btn-juntar').disabled = false;
+  renderPecasList(id);
+  resetViewer();
+}
+
+function renderPecasList(id) {
+  const pecas = (autos[id] || []).sort((a, b) => (a.folhaInicio||a.folha) - (b.folhaInicio||b.folha));
+  const totalPgs = pecas.reduce((sum, p) => sum + (p.pages || 1), 0);
+  document.getElementById('pec-count').textContent = `${pecas.length} peça${pecas.length !== 1 ? 's' : ''} · fl. ${totalPgs} no total`;
+  document.getElementById('jd-fl').textContent = proximaFolha(id);
+  document.getElementById('autos-pec-list').innerHTML = pecas.length
+    ? pecas.map(pc => {
+        const fi = pc.folhaInicio || pc.folha;
+        const ff = fi + (pc.pages || 1) - 1;
+        const folhaLabel = ff > fi ? `fl.${String(fi).padStart(3,'0')}–${String(ff).padStart(3,'0')}` : `fl.${String(fi).padStart(3,'0')}`;
+        const isActive = curPeca && (curPeca.folhaInicio||curPeca.folha) === fi;
+        return `
+          <div class="pec-item ${isActive ? 'active' : ''}" onclick="selPeca('${id}',${fi})">
+            <div class="pfl">${folhaLabel}</div>
+            <div class="pinfo">
+              <div class="ptyp">${pc.tipo}</div>
+              <div class="pdsc">${pc.desc}</div>
+              <div class="pdat">${fmtD(pc.data)}${pc.pages > 1 ? ` · ${pc.pages}p` : ''}</div>
+            </div>
+            <button class="btn btn-sm btn-d" style="flex-shrink:0;padding:3px 6px" onclick="event.stopPropagation();deletarPeca('${id}',${fi})"><i class="ti ti-trash"></i></button>
+          </div>`;
+      }).join('')
+    : '<div class="es"><i class="ti ti-files"></i>Sem peças. Use "Juntar doc."</div>';
+}
+
+// FIX #6: Excluir peça
+function deletarPeca(procId, fi) {
+  if (!confirm('Excluir esta peça dos autos?')) return;
+  autos[procId] = (autos[procId] || []).filter(p => (p.folhaInicio||p.folha) !== fi);
+  // Recompute folhaInicio sequentially
+  let cursor = 1;
+  autos[procId].sort((a,b) => (a.folhaInicio||a.folha) - (b.folhaInicio||b.folha)).forEach(p => {
+    p.folha = cursor; p.folhaInicio = cursor;
+    cursor += (p.pages || 1);
+  });
+  if (curPeca && (curPeca.folhaInicio||curPeca.folha) === fi) { curPeca = null; resetViewer(); }
+  renderPecasList(procId);
+  toast('Peça excluída dos autos', 's');
+}
+
+function selPeca(procId, fi) {
+  const pc = (autos[procId] || []).find(p => (p.folhaInicio||p.folha) === fi);
+  if (!pc) return;
+  curPeca = { ...pc, processoId: procId };
+  renderPecasList(procId);
+  loadViewer(pc, procId);
+}
+
+// FIX #3: Visualizador real com iframe Google Drive
+function loadViewer(pc, procId) {
+  const fi = pc.folhaInicio || pc.folha;
+  const ff = fi + (pc.pages||1) - 1;
+  const folhaLabel = ff > fi ? `fl.${String(fi).padStart(3,'0')}–${String(ff).padStart(3,'0')}` : `fl.${String(fi).padStart(3,'0')}`;
+  document.getElementById('av-label').textContent = `${folhaLabel} — ${pc.tipo}`;
+  document.getElementById('btn-drive-open').disabled = !pc.driveId;
+
+  const frame = document.getElementById('av-frame');
+  if (pc.driveId) {
+    // Embed real do Google Drive
+    const previewUrl = `https://drive.google.com/file/d/${pc.driveId}/preview`;
+    frame.innerHTML = `<iframe src="${previewUrl}" allow="autoplay" style="width:100%;height:100%;border:none"></iframe>`;
+  } else {
+    // Placeholder quando não há arquivo vinculado
+    frame.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--tx3);gap:10px;background:#EDECEA">
+        <i class="ti ti-file-description" style="font-size:52px"></i>
+        <div style="font-size:13px;font-weight:500">${pc.tipo}</div>
+        <div style="font-size:11px;color:var(--tx3);text-align:center;max-width:300px">${pc.desc}</div>
+        <div style="font-size:11px;font-family:var(--mono);color:var(--tx3)">${fmtD(pc.data)} · ${pc.autor}</div>
+        <div style="margin-top:8px;padding:8px 14px;background:var(--blue-bg);border-radius:var(--r);font-size:11px;color:var(--blue);text-align:center">
+          <i class="ti ti-info-circle" style="font-size:13px"></i> Nenhum arquivo vinculado.<br>
+          Use "Juntar doc." e informe o ID do arquivo no Google Drive.
+        </div>
+      </div>`;
+  }
+}
+
+function resetViewer() {
+  document.getElementById('av-label').textContent = 'Selecione uma peça';
+  document.getElementById('btn-drive-open').disabled = true;
+  document.getElementById('av-frame').innerHTML = '<div class="av-empty"><i class="ti ti-file-description"></i><span style="font-size:12px">Selecione uma peça para visualizar</span></div>';
+}
+
+function abrirNoDrive() {
+  if (curPeca && curPeca.driveId) {
+    window.open(`https://drive.google.com/file/d/${curPeca.driveId}/view`, '_blank');
+  }
+}
+
+function proximaFolha(procId) {
+  const pecas = autos[procId] || [];
+  if (!pecas.length) return 1;
+  const last = pecas[pecas.length - 1];
+  return (last.folhaInicio || last.folha) + (last.pages || 1);
+}
+
+function juntarDoc() {
+  if (!autosProc) { toast('Selecione um processo', 'e'); return; }
+  const desc = document.getElementById('jd-desc').value.trim();
+  if (!desc) { toast('Informe a descrição', 'e'); return; }
+  if (!autos[autosProc]) autos[autosProc] = [];
+  const folhaInicio = proximaFolha(autosProc);
+  const pages = parseInt(document.getElementById('jd-pages').value) || 1;
+  const pc = {
+    folha: folhaInicio,
+    folhaInicio,
+    pages,
+    tipo: document.getElementById('jd-tipo').value,
+    desc, data: document.getElementById('jd-data').value || hojeISO(),
+    autor: document.getElementById('jd-autor').value,
+    driveId: document.getElementById('jd-drive').value.trim()
+  };
+  autos[autosProc].push(pc);
+  if (GAS_URL) fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'addPeca', data: { processoId: autosProc, ...pc } }) }).catch(() => {});
+  closeM('m-juntar');
+  ['jd-desc','jd-autor','jd-drive'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('jd-pages').value = '1';
+  renderPecasList(autosProc);
+  const folhaFim = folhaInicio + pages - 1;
+  toast(`Fl.${String(folhaInicio).padStart(3,'0')}${pages > 1 ? '–' + String(folhaFim).padStart(3,'0') : ''} juntada aos autos`, 's');
+}
+
+function abrirAutosProc(id) {
+  autosProc = id;
+  closeM('m-detalhe');
+  navTo('autos', document.getElementById('tab-autos'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SYNC / CONFIG / GAS
+// ═══════════════════════════════════════════════════════════════
+function salvarCfg() {
+  GAS_URL = document.getElementById('cfg-url').value.trim();
+  CFG.secretario = document.getElementById('cfg-sec').value.trim() || CFG.secretario;
+  CFG.orgao = document.getElementById('cfg-org').value.trim() || CFG.orgao;
+  localStorage.setItem('secop_gas_url', GAS_URL);
+  localStorage.setItem('secop_sec', CFG.secretario);
+  localStorage.setItem('secop_org', CFG.orgao);
+  closeM('m-config');
+  toast('Configuração salva', 's');
+}
+
+async function sincronizar() {
+  const icon = document.getElementById('sync-icon');
+  const css = document.createElement('style');
+  css.id = 'spin-css';
+  css.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+  document.head.appendChild(css);
+  icon.style.animation = 'spin 0.7s linear infinite';
+
+  if (GAS_URL) {
+    try {
+      // Processos
+      const r1 = await fetch(`${GAS_URL}?action=getProcessos`);
+      const j1 = await r1.json();
+      if (j1.data && j1.data.length) {
+        // FIX #4: Mapeamento exato dos cabeçalhos da planilha
+        processos = j1.data.map(row => ({
+          id:           row['ID']              || row['id']              || '',
+          tipo:         row['Tipo']            || row['tipo']            || 'Sindicância',
+          portaria:     row['Nº Portaria']     || row['Portaria']        || '',
+          objeto:       row['Objeto']          || row['objeto']          || '',
+          dataPortaria: row['Data Portaria']   || row['data_portaria']   || '',
+          prazo:        parseInt(row['Prazo (dias)'] || row['prazo'] || '30'),
+          comissao:     row['Comissão']        || row['comissao']        || '',
+          fase:         row['Fase']            || row['fase']            || 'Instrução',
+          adv:          row['Advogado do Acusado'] || row['adv']        || '—',
+        })).filter(p => p.id);
+      }
+
+      // Membros — FIX #4
+      const r2 = await fetch(`${GAS_URL}?action=getMembros`);
+      const j2 = await r2.json();
+      if (j2.data && j2.data.length) {
+        membros = j2.data.map(m => ({
+          nome:     m['Nome']     || m['nome']     || '',
+          funcao:   m['Função']   || m['funcao']   || 'Membro',
+          comissao: (m['Comissão'] || m['comissao'] || '').replace('Comissão ', ''),
+          tipo:     m['Tipo']     || m['tipo']     || 'Titular',
+          status:   m['Status']   || m['status']   || 'Ativo',
+        })).filter(m => m.nome);
+      }
+
+      // Afastamentos — FIX #4
+      const r3 = await fetch(`${GAS_URL}?action=getAfastamentos`);
+      const j3 = await r3.json();
+      if (j3.data && j3.data.length) {
+        afastamentos = j3.data.map(a => ({
+          membro:     a['Membro']     || '',
+          tipo:       a['Tipo']       || '',
+          escopo:     a['Escopo']     || 'geral',
+          processoId: a['Processo ID'] || null,
+          inicio:     a['Data Início'] || a['Início'] || '',
+          termino:    a['Data Término'] || a['Término'] || '',
+          substituto: a['Substituto'] || '',
+          status:     a['Status']     || 'Em curso',
+        })).filter(a => a.membro);
+      }
+
+      toast(`Dados sincronizados — ${processos.length} processos`, 's');
+      const bar = document.getElementById('dash-sb');
+      bar.style.display = 'flex';
+      document.getElementById('dash-sb-msg').textContent = 'Sincronizado em ' + new Date().toLocaleTimeString('pt-BR');
+      setTimeout(() => bar.style.display = 'none', 5000);
+    } catch (e) {
+      toast('Erro ao conectar com o Sheets. Verifique a URL em ⚙', 'e');
+    }
+  } else {
+    toast('Configure a URL do Apps Script em ⚙', 'i');
+  }
+
+  setTimeout(() => { icon.style.animation = ''; renderAll(); }, 900);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+function safe(fn, label) {
+  try { fn(); } catch(e) { console.error('[SECOP] Erro em ' + label + ':', e); }
+}
+
+function renderAll() {
+  safe(renderDash,        'renderDash');
+  safe(renderProc,        'renderProc');
+  safe(renderPrazos,      'renderPrazos');
+  safe(renderComissoes,   'renderComissoes');
+  safe(renderPendencias,  'renderPendencias');
+  safe(renderGratificacao,'renderGratificacao');
+  safe(renderInstrucaoSel,'renderInstrucaoSel');
+  if (document.getElementById('page-instrucao').classList.contains('active')) {
+    safe(renderInstrucao, 'renderInstrucao');
+  }
+  document.getElementById('cfg-url').value = GAS_URL;
+  document.getElementById('cfg-sec').value = CFG.secretario;
+  document.getElementById('cfg-org').value = CFG.orgao;
+  safe(populateAfForm, 'populateAfForm');
+}
+
+renderAll();
+</script>
+</body></html>

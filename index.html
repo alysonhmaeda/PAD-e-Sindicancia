@@ -1174,16 +1174,114 @@ function prorrogarProcesso() {
   const obs      = document.getElementById('prorr-obs').value.trim();
   if (!portaria||!dias||!data) { toast('Preencha portaria, dias e data','e'); return; }
   if (!p.prorrogacoes) p.prorrogacoes = [];
-  p.prorrogacoes.push({portaria, dias, data, obs});
+  const pr = {portaria, dias, data, obs};
+  p.prorrogacoes.push(pr);
+  gasPost({action:'addProrrogacao', data:{processoId:curProc, ...pr}});
   saveState(); closeM('m-prorrogacao');
   ['prorr-portaria','prorr-dias','prorr-data','prorr-obs'].forEach(id=>document.getElementById(id).value='');
   renderAll();
   toast(`Prorrogado por ${dias} dias — novo prazo: ${prazoTotal(p)}d`,'s');
 }
 
-// ═══════════════════════════════════════════════════════════════
-// INSTRUÇÃO  (Fix #1: persiste; Fix #4: investigado/setor)
-// ═══════════════════════════════════════════════════════════════
+function deletarProrrogacao(procId, idx) {
+  if (!confirm('Remover prorrogação?')) return;
+  const p = processos.find(x=>x.id===procId);
+  if (!p) return;
+  const pr = p.prorrogacoes[idx];
+  p.prorrogacoes.splice(idx,1);
+  gasPost({action:'deleteProrrogacao', data:{processoId:procId, portaria:pr.portaria, data:pr.data}});
+  saveState(); renderInstrucao(); renderPrazos(); toast('Removida','s');
+}
+
+function toggleTW(procId, idx, campo, val) {
+  if (!testemunhas[procId]?.[idx]) return;
+  testemunhas[procId][idx][campo] = val;
+  gasPost({action:'updateTestemunha', data:{processoId:procId, idx, campo, valor:val}});
+  saveState(); renderInstrucao();
+}
+
+function deletarTW(procId, idx) {
+  if (!confirm('Remover testemunha?')) return;
+  const tw = testemunhas[procId][idx];
+  testemunhas[procId].splice(idx,1);
+  gasPost({action:'deleteTestemunha', data:{processoId:procId, nome:tw.nome}});
+  saveState(); renderInstrucao(); toast('Removida','s');
+}
+
+function deletarOitiva(id, procId) {
+  if (!confirm('Remover oitiva?')) return;
+  agendaOitivas = agendaOitivas.filter(o=>o.id!==id);
+  gasPost({action:'deleteOitiva', data:{oitivaId:id, processoId:procId}});
+  saveState(); renderInstrucao(); renderDash(); toast('Removida','s');
+}
+
+function prepOitiva(procId) {
+  document.getElementById('oi-proc').value=procId; openM('m-oitiva');
+}
+
+function salvarTestemunha() {
+  const procId = document.getElementById('inst-sel').value||curProc;
+  if (!procId) { toast('Selecione um processo','e'); return; }
+  const nome = document.getElementById('tw-nome').value.trim();
+  if (!nome) { toast('Informe o nome','e'); return; }
+  if (!testemunhas[procId]) testemunhas[procId]=[];
+  const tw = {
+    nome, qual:document.getElementById('tw-qual').value,
+    cont:document.getElementById('tw-cont').value,
+    intim:document.getElementById('tw-intim').value,
+    oitiva:document.getElementById('tw-oitiva').value,
+    intimado:false, realizada:false
+  };
+  testemunhas[procId].push(tw);
+  gasPost({action:'addTestemunha', data:{processoId:procId, ...tw}});
+  saveState(); closeM('m-testemunha');
+  ['tw-nome','tw-qual','tw-cont','tw-intim','tw-oitiva'].forEach(id=>document.getElementById(id).value='');
+  renderInstrucao(); toast('Testemunha adicionada','s');
+}
+
+function salvarOitiva() {
+  const procId = document.getElementById('oi-proc').value;
+  const pessoa = document.getElementById('oi-pessoa').value.trim();
+  const data   = document.getElementById('oi-data').value;
+  if (!pessoa||!data) { toast('Preencha pessoa e data','e'); return; }
+  const oi = {
+    id:'o'+Date.now(), processoId:procId, pessoa, data,
+    hora:document.getElementById('oi-hora').value,
+    local:document.getElementById('oi-local').value,
+    obs:document.getElementById('oi-obs').value
+  };
+  agendaOitivas.push(oi);
+  gasPost({action:'addOitiva', data:oi});
+  saveState(); closeM('m-oitiva');
+  ['oi-pessoa','oi-data','oi-hora','oi-local','oi-obs'].forEach(id=>document.getElementById(id).value='');
+  renderInstrucao(); renderDash(); toast('Oitiva agendada','s');
+}
+
+function salvarPrazoExtra() {
+  const procId = document.getElementById('inst-sel').value||curProc;
+  if (!procId) { toast('Selecione um processo','e'); return; }
+  const fim = document.getElementById('pa-fim').value;
+  if (!fim) { toast('Informe a data limite','e'); return; }
+  if (!prazosExtras[procId]) prazosExtras[procId]=[];
+  const pe = {
+    tipo:document.getElementById('pa-tipo').value,
+    inicio:document.getElementById('pa-ini').value,
+    fim, obs:document.getElementById('pa-obs').value
+  };
+  prazosExtras[procId].push(pe);
+  gasPost({action:'addPrazoExtra', data:{processoId:procId, ...pe}});
+  saveState(); closeM('m-prazo-add');
+  ['pa-ini','pa-fim','pa-obs'].forEach(id=>document.getElementById(id).value='');
+  renderPrazos(); renderInstrucao(); toast('Prazo adicionado','s');
+}
+
+function deletarPrazoExtra(procId, idx) {
+  if (!confirm('Remover prazo?')) return;
+  const pe = prazosExtras[procId][idx];
+  prazosExtras[procId].splice(idx,1);
+  gasPost({action:'deletePrazoExtra', data:{processoId:procId, tipo:pe.tipo, fim:pe.fim}});
+  saveState(); renderInstrucao(); renderPrazos(); toast('Removido','s');
+}
 function renderInstrucaoSel() {
   const sel = document.getElementById('inst-sel');
   const cur = sel.value;
@@ -1336,78 +1434,9 @@ function renderInstrucao() {
     </div>`;
 }
 
-function updateProcField(id, campo, val) {
-  const p = processos.find(x=>x.id===id);
-  if (p) { p[campo]=val; saveState(); toast('Salvo','s'); }
-}
-
-function deletarProrrogacao(procId, idx) {
-  if (!confirm('Remover prorrogação?')) return;
-  const p = processos.find(x=>x.id===procId);
-  if (p) { p.prorrogacoes.splice(idx,1); saveState(); renderInstrucao(); renderPrazos(); toast('Removida','s'); }
-}
-
-function toggleTW(procId, idx, campo, val) {
-  if (testemunhas[procId]?.[idx]) { testemunhas[procId][idx][campo]=val; saveState(); renderInstrucao(); }
-}
-
-function deletarTW(procId, idx) {
-  if (!confirm('Remover testemunha?')) return;
-  testemunhas[procId].splice(idx,1); saveState(); renderInstrucao(); toast('Removida','s');
-}
-
-function deletarOitiva(id, procId) {
-  if (!confirm('Remover oitiva?')) return;
-  agendaOitivas = agendaOitivas.filter(o=>o.id!==id);
-  saveState(); renderInstrucao(); renderDash(); toast('Removida','s');
-}
-
-function prepOitiva(procId) {
-  document.getElementById('oi-proc').value=procId; openM('m-oitiva');
-}
-
-function salvarTestemunha() {
-  const procId = document.getElementById('inst-sel').value||curProc;
-  if (!procId) { toast('Selecione um processo','e'); return; }
-  const nome = document.getElementById('tw-nome').value.trim();
-  if (!nome) { toast('Informe o nome','e'); return; }
-  if (!testemunhas[procId]) testemunhas[procId]=[];
-  testemunhas[procId].push({nome, qual:document.getElementById('tw-qual').value, cont:document.getElementById('tw-cont').value, intim:document.getElementById('tw-intim').value, oitiva:document.getElementById('tw-oitiva').value, intimado:false, realizada:false});
-  saveState(); closeM('m-testemunha');
-  ['tw-nome','tw-qual','tw-cont','tw-intim','tw-oitiva'].forEach(id=>document.getElementById(id).value='');
-  renderInstrucao(); toast('Testemunha adicionada','s');
-}
-
-function salvarOitiva() {
-  const procId = document.getElementById('oi-proc').value;
-  const pessoa = document.getElementById('oi-pessoa').value.trim();
-  const data   = document.getElementById('oi-data').value;
-  if (!pessoa||!data) { toast('Preencha pessoa e data','e'); return; }
-  agendaOitivas.push({id:'o'+Date.now(), processoId:procId, pessoa, data, hora:document.getElementById('oi-hora').value, local:document.getElementById('oi-local').value, obs:document.getElementById('oi-obs').value});
-  saveState(); closeM('m-oitiva');
-  ['oi-pessoa','oi-data','oi-hora','oi-local','oi-obs'].forEach(id=>document.getElementById(id).value='');
-  renderInstrucao(); renderDash(); toast('Oitiva agendada','s');
-}
-
-function salvarPrazoExtra() {
-  const procId = document.getElementById('inst-sel').value||curProc;
-  if (!procId) { toast('Selecione um processo','e'); return; }
-  const fim = document.getElementById('pa-fim').value;
-  if (!fim) { toast('Informe a data limite','e'); return; }
-  if (!prazosExtras[procId]) prazosExtras[procId]=[];
-  prazosExtras[procId].push({tipo:document.getElementById('pa-tipo').value, inicio:document.getElementById('pa-ini').value, fim, obs:document.getElementById('pa-obs').value});
-  saveState(); closeM('m-prazo-add');
-  ['pa-ini','pa-fim','pa-obs'].forEach(id=>document.getElementById(id).value='');
-  renderPrazos(); renderInstrucao(); toast('Prazo adicionado','s');
-}
-
-function deletarPrazoExtra(procId, idx) {
-  if (!confirm('Remover prazo?')) return;
-  prazosExtras[procId].splice(idx,1); saveState(); renderInstrucao(); renderPrazos(); toast('Removido','s');
-}
-
 // ═══════════════════════════════════════════════════════════════
-// COMISSÕES  (Fix #5/#6/#13/#15/#16/#17)
+// INSTRUÇÃO  (Fix #1: persiste; Fix #4: investigado/setor)
+// ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 function renderComissoes() {
   // Fix #6/#13: portaria de nomeação, não data fixa
@@ -1525,6 +1554,8 @@ function editarAfastamento(idx) {
 
 function deletarAfastamento(idx) {
   if (!confirm('Excluir este registro?')) return;
+  const af=afastamentos[idx];
+  gasPost({action:'deleteAfastamento', data:{membro:af.membro, tipo:af.tipo}});
   afastamentos.splice(idx,1); saveState(); renderComissoes(); toast('Removido','s');
 }
 
@@ -1535,8 +1566,7 @@ function salvarAfastamento() {
   const af = {
     id: 'af'+Date.now(),
     membro:    document.getElementById('af-membro').value,
-    tipo,
-    escopo,
+    tipo, escopo,
     processoId: escopo==='especifico' ? document.getElementById('af-proc').value : null,
     portariaConvocacao: document.getElementById('af-portaria-conv').value.trim(),
     inicio:  semData ? null : (document.getElementById('af-ini').value||null),
@@ -1548,6 +1578,7 @@ function salvarAfastamento() {
   const editIdx = document.getElementById('af-edit-idx').value;
   if (editIdx!=='') { af.id=afastamentos[editIdx].id; afastamentos[editIdx]=af; }
   else afastamentos.push(af);
+  gasPost({action:'addAfastamento', data:af});
   saveState(); closeM('m-afastamento'); renderComissoes(); toast('Afastamento salvo','s');
 }
 
@@ -1661,7 +1692,36 @@ function openDetalhe(id) {
   const fases=['Instauração','Instrução','Oitivas','Indiciamento','Defesa','Relatório','Julgamento','Arquivado'];
   const nProrr=(p.prorrogacoes||[]).length;
   document.getElementById('d-meta').innerHTML=`
-    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px"><div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Portaria</div><div style="font-size:12px;font-weight:500;font-family:var(--mono)">${p.portaria}</div></div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px">
+      <div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">
+        Nº Portaria <span style="color:var(--blue);font-size:9px;cursor:pointer" onclick="toggleEditPortaria('${id}')">(editar)</span>
+      </div>
+      <div id="portaria-display-${id}" style="font-size:12px;font-weight:500;font-family:var(--mono)">${p.portaria}</div>
+      <div id="portaria-edit-${id}" style="display:none;display:flex;gap:4px">
+        <input class="fc" id="portaria-input-${id}" value="${p.portaria}" style="font-size:12px;padding:3px 6px;font-family:var(--mono);flex:1"
+          onkeydown="if(event.key==='Enter') confirmarEditPortaria('${id}'); if(event.key==='Escape') cancelarEditPortaria('${id}')">
+        <button class="btn btn-sm btn-p" onclick="confirmarEditPortaria('${id}')"><i class="ti ti-check"></i></button>
+        <button class="btn btn-sm" onclick="cancelarEditPortaria('${id}')"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+    <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px">
+      <div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">
+        ID do processo <span style="color:var(--blue);font-size:9px;cursor:pointer" onclick="toggleEditID('${id}')">(editar)</span>
+      </div>
+      <div id="procid-display-${id}" style="font-size:12px;font-weight:500;font-family:var(--mono);color:var(--blue)">${p.id}</div>
+      <div id="procid-edit-${id}" style="display:none">
+        <div style="font-size:10px;color:var(--amber);margin-bottom:4px;display:flex;align-items:center;gap:4px">
+          <i class="ti ti-alert-triangle" style="font-size:12px"></i>
+          Atualiza todos os dados vinculados (notas, autos, testemunhas).
+        </div>
+        <div style="display:flex;gap:4px">
+          <input class="fc" id="procid-input-${id}" value="${p.id}" style="font-size:12px;padding:3px 6px;font-family:var(--mono);flex:1"
+            onkeydown="if(event.key==='Enter') confirmarEditID('${id}'); if(event.key==='Escape') cancelarEditID('${id}')">
+          <button class="btn btn-sm btn-p" onclick="confirmarEditID('${id}')"><i class="ti ti-check"></i></button>
+          <button class="btn btn-sm" onclick="cancelarEditID('${id}')"><i class="ti ti-x"></i></button>
+        </div>
+      </div>
+    </div>
     <div style="background:var(--bg);border-radius:var(--r);padding:7px 9px"><div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Fase</div>
       <select class="fc" style="font-size:12px;padding:4px 7px" onchange="alterarFase('${id}',this.value)">
         ${fases.map(f=>`<option value="${f}" ${f===p.fase?'selected':''}>${f}</option>`).join('')}
@@ -1682,8 +1742,109 @@ function openDetalhe(id) {
 function alterarFase(id, novaFase) {
   const p=processos.find(x=>x.id===id); if(!p) return;
   p.fase=novaFase; saveState();
-  if(GAS_URL) fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'updateProcesso',data:{id,fase:novaFase}})}).catch(()=>{});
+  gasPost({action:'updateCampo', data:{id, campo:'Fase', valor:novaFase}});
   renderAll(); toast(`Fase → ${novaFase}`,'s');
+}
+
+// ── Edição inline de Portaria ───────────────────────────────
+function toggleEditPortaria(id) {
+  const disp = document.getElementById(`portaria-display-${id}`);
+  const edit = document.getElementById(`portaria-edit-${id}`);
+  if (!disp || !edit) return;
+  const isHidden = edit.style.display === 'none' || edit.style.display === '';
+  disp.style.display = isHidden ? 'none' : 'block';
+  edit.style.display  = isHidden ? 'flex' : 'none';
+  if (isHidden) document.getElementById(`portaria-input-${id}`)?.focus();
+}
+
+function confirmarEditPortaria(id) {
+  const p = processos.find(x=>x.id===id); if(!p) return;
+  const novaPortaria = (document.getElementById(`portaria-input-${id}`)?.value||'').trim();
+  if (!novaPortaria) { toast('A portaria não pode ser vazia','e'); return; }
+  p.portaria = novaPortaria;
+  saveState();
+  gasPost({action:'updateCampo', data:{id, campo:'Nº Portaria', valor:novaPortaria}});
+  // Update display without re-opening modal
+  const disp = document.getElementById(`portaria-display-${id}`);
+  if (disp) disp.textContent = novaPortaria;
+  const edit = document.getElementById(`portaria-edit-${id}`);
+  if (disp) disp.style.display = 'block';
+  if (edit) edit.style.display = 'none';
+  renderProc(); renderPrazos();
+  toast(`Portaria atualizada → ${novaPortaria}`,'s');
+}
+
+function cancelarEditPortaria(id) {
+  const p = processos.find(x=>x.id===id); if(!p) return;
+  const input = document.getElementById(`portaria-input-${id}`);
+  if (input) input.value = p.portaria;
+  document.getElementById(`portaria-display-${id}`)?.style && (document.getElementById(`portaria-display-${id}`).style.display='block');
+  document.getElementById(`portaria-edit-${id}`)?.style && (document.getElementById(`portaria-edit-${id}`).style.display='none');
+}
+
+// ── Edição inline de ID do processo ────────────────────────
+function toggleEditID(id) {
+  const disp = document.getElementById(`procid-display-${id}`);
+  const edit = document.getElementById(`procid-edit-${id}`);
+  if (!disp || !edit) return;
+  const isHidden = edit.style.display === 'none' || edit.style.display === '';
+  disp.style.display = isHidden ? 'none' : 'block';
+  edit.style.display  = isHidden ? 'block' : 'none';
+  if (isHidden) document.getElementById(`procid-input-${id}`)?.focus();
+}
+
+function confirmarEditID(oldId) {
+  const p = processos.find(x=>x.id===oldId); if(!p) return;
+  const novoId = (document.getElementById(`procid-input-${oldId}`)?.value||'').trim();
+  if (!novoId) { toast('O ID não pode ser vazio','e'); return; }
+  if (novoId === oldId) { cancelarEditID(oldId); return; }
+  if (processos.find(x=>x.id===novoId)) { toast(`ID "${novoId}" já existe em outro processo`,'e'); return; }
+
+  // Renames all linked data structures
+  p.id = novoId;
+
+  // Notas
+  if (notas[oldId]) { notas[novoId]=notas[oldId]; delete notas[oldId]; }
+
+  // Autos
+  if (autos[oldId]) { autos[novoId]=autos[oldId]; delete autos[oldId]; }
+
+  // Testemunhas
+  if (testemunhas[oldId]) { testemunhas[novoId]=testemunhas[oldId]; delete testemunhas[oldId]; }
+
+  // Prazos extras
+  if (prazosExtras[oldId]) { prazosExtras[novoId]=prazosExtras[oldId]; delete prazosExtras[oldId]; }
+
+  // Agenda de oitivas
+  agendaOitivas.forEach(o=>{ if(o.processoId===oldId) o.processoId=novoId; });
+
+  // Afastamentos específicos
+  afastamentos.forEach(a=>{ if(a.processoId===oldId) a.processoId=novoId; });
+
+  // Sync: rename in Sheets (update ID column) + update linked data
+  gasPost({action:'renomearProcesso', data:{oldId, novoId}});
+
+  curProc = novoId;
+  saveState();
+  renderAll();
+  // Re-open modal with new ID
+  openDetalhe(novoId);
+  toast(`Processo renomeado: ${oldId} → ${novoId}`,'s');
+}
+
+function cancelarEditID(id) {
+  const p = processos.find(x=>x.id===id); if(!p) return;
+  const input = document.getElementById(`procid-input-${id}`);
+  if (input) input.value = p.id;
+  document.getElementById(`procid-display-${id}`)?.style && (document.getElementById(`procid-display-${id}`).style.display='block');
+  document.getElementById(`procid-edit-${id}`)?.style && (document.getElementById(`procid-edit-${id}`).style.display='none');
+}
+
+function updateProcField(id, campo, val) {
+  const p=processos.find(x=>x.id===id); if(!p) return;
+  p[campo]=val; saveState();
+  gasPost({action:'updateCampo', data:{id, campo, valor:val}});
+  toast('Salvo','s');
 }
 
 function renderTimeline(id) {
@@ -1693,22 +1854,33 @@ function renderTimeline(id) {
     : '<div class="es" style="padding:8px 0">Nenhuma nota registrada.</div>';
 }
 
+// Helper: escreve para o Sheets de forma não-bloqueante, com retry silencioso
+function gasPost(data) {
+  if (!GAS_URL) return;
+  fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // evita CORS preflight
+    body: JSON.stringify(data)
+  }).catch(e => console.warn('[SECOP] GAS write failed:', e));
+}
+
 function addNota() {
   const txt=document.getElementById('nova-nota').value.trim();
   if(!txt||!curProc) return;
   const tipo=document.getElementById('nota-tipo').value;
+  const data=hojeISO();
   if(!notas[curProc]) notas[curProc]=[];
-  notas[curProc].push({data:hojeISO(),tipo,texto:txt});
+  notas[curProc].push({data,tipo,texto:txt});
   document.getElementById('nova-nota').value='';
   saveState(); renderTimeline(curProc);
-  if(GAS_URL) fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'addNota',data:{processoId:curProc,data:hojeISO(),tipo,texto:txt}})}).catch(()=>{});
+  gasPost({action:'addNota', data:{processoId:curProc, data, tipo, texto:txt}});
   toast('Nota registrada','s');
 }
 
 function deletarProc() {
   if(!curProc||!confirm(`Excluir ${curProc}?`)) return;
   processos=processos.filter(p=>p.id!==curProc);
-  if(GAS_URL) fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'deleteProcesso',data:{id:curProc}})}).catch(()=>{});
+  gasPost({action:'deleteProcesso', data:{id:curProc}});
   saveState(); closeM('m-detalhe'); renderAll(); toast('Processo excluído','s');
 }
 
@@ -1720,11 +1892,14 @@ function salvarProc() {
   if(!portaria||!objeto||!data){toast('Preencha portaria, objeto e data','e');return;}
   const prefix=tipo==='PAD'?'PAD':'SIN';
   const id=`${prefix}-${String(processos.length+1).padStart(3,'0')}/${new Date().getFullYear()}`;
-  const p={id,tipo,portaria,objeto,dataPortaria:data,prazo:tipo==='PAD'?60:30,prorrogacoes:[],comissao:document.getElementById('np-com').value,fase:document.getElementById('np-fase').value,adv:document.getElementById('np-adv').value||'—',investigado:'',setor:''};
+  const p={id,tipo,portaria,objeto,dataPortaria:data,prazo:tipo==='PAD'?60:30,prorrogacoes:[],
+    comissao:document.getElementById('np-com').value,fase:document.getElementById('np-fase').value,
+    adv:document.getElementById('np-adv').value||'—',investigado:'',setor:''};
   const obs=document.getElementById('np-obs').value;
   if(obs) notas[id]=[{data:hojeISO(),tipo:'Nota geral',texto:obs}];
   processos.unshift(p);
-  if(GAS_URL) fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'addProcesso',data:{...p,obs}})}).catch(()=>{});
+  gasPost({action:'addProcesso', data:p});
+  if(obs) gasPost({action:'addNota', data:{processoId:id,data:hojeISO(),tipo:'Nota geral',texto:obs}});
   saveState(); closeM('m-novo-proc');
   ['np-port','np-obj','np-data','np-adv','np-obs'].forEach(id=>document.getElementById(id).value='');
   renderAll(); toast(`Processo ${id} registrado`,'s');
@@ -1840,7 +2015,7 @@ function juntarDoc() {
   const pages=parseInt(document.getElementById('jd-pages').value)||1;
   const pc={folha:folhaInicio,folhaInicio,pages,tipo:document.getElementById('jd-tipo').value,desc,data:document.getElementById('jd-data').value||hojeISO(),autor:document.getElementById('jd-autor').value,driveId:document.getElementById('jd-drive').value.trim()};
   autos[autosProc].push(pc);
-  if(GAS_URL) fetch(GAS_URL,{method:'POST',body:JSON.stringify({action:'addPeca',data:{processoId:autosProc,...pc}})}).catch(()=>{});
+  gasPost({action:'addPeca', data:{processoId:autosProc,...pc}});
   saveState(); closeM('m-juntar');
   ['jd-desc','jd-autor','jd-drive'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('jd-pages').value='1';
@@ -1868,45 +2043,175 @@ async function sincronizar() {
   const icon=document.getElementById('sync-icon');
   const css=document.createElement('style'); css.textContent='@keyframes spin{to{transform:rotate(360deg)}}'; document.head.appendChild(css);
   icon.style.animation='spin 0.7s linear infinite';
-  if(GAS_URL){
-    try{
-      const r1=await fetch(`${GAS_URL}?action=getProcessos`); const j1=await r1.json();
-      if(j1.data?.length){
-        processos=j1.data.map(row=>({
-          id:row['ID']||'', tipo:row['Tipo']||'Sindicância',
-          portaria:row['Nº Portaria']||row['Portaria']||'',
-          objeto:row['Objeto']||'', dataPortaria:row['Data Portaria']||'',
-          prazo:parseInt(row['Prazo (dias)']||'30'), prorrogacoes:[],
-          comissao:row['Comissão']||'', fase:row['Fase']||'Instrução',
-          adv:row['Advogado do Acusado']||'—', investigado:row['Investigado']||'', setor:row['Setor']||'',
-        })).filter(p=>p.id);
-      }
-      const r2=await fetch(`${GAS_URL}?action=getMembros`); const j2=await r2.json();
-      if(j2.data?.length){
-        membros=j2.data.map(m=>({
-          nome:m['Nome']||'', funcao:m['Função']||m['Funcao']||'Membro',
-          comissao:(m['Comissão']||m['Comissao']||'').replace('Comissão ',''),
-          tipo:m['Tipo']||'Titular', status:m['Status']||'Ativo', portariaConvocacao:m['Portaria Convocação']||'',
-        })).filter(m=>m.nome);
-      }
-      const r3=await fetch(`${GAS_URL}?action=getAfastamentos`); const j3=await r3.json();
-      if(j3.data?.length){
-        afastamentos=j3.data.map(a=>({
-          id:'af'+Math.random(), membro:a['Membro']||'',
-          tipo:a['Tipo']||'', escopo:a['Escopo']||'geral',
-          processoId:a['Processo ID']||null, portariaConvocacao:a['Portaria Convocação']||'',
-          inicio:a['Data Início']||a['Início']||null, termino:a['Data Término']||a['Término']||null,
-          substituto:a['Substituto']||'', status:a['Status']||'Em curso',
-        })).filter(a=>a.membro);
-      }
-      saveState(); toast(`${processos.length} processos sincronizados`,'s');
-      const bar=document.getElementById('dash-sb'); bar.style.display='flex';
-      document.getElementById('dash-sb-msg').textContent='Sincronizado em '+new Date().toLocaleTimeString('pt-BR');
-      setTimeout(()=>bar.style.display='none',5000);
-    } catch(e){ toast('Erro na sincronização. Verifique a URL em ⚙','e'); }
-  } else { toast('Configure a URL do Apps Script em ⚙','i'); }
+  if(!GAS_URL){ toast('Configure a URL do Apps Script em ⚙','i'); icon.style.animation=''; return; }
+  try{
+    // Helper: limpa datas que chegam com timezone do Sheets ("2025-02-10T03:00:00.000Z" → "2025-02-10")
+    function cleanDate(v){ if(!v) return ''; return String(v).split('T')[0]; }
+
+    // ── Processos ────────────────────────────────
+    const r1=await fetch(`${GAS_URL}?action=getProcessos`); const j1=await r1.json();
+    if(j1.data?.length){
+      processos=j1.data.map(row=>({
+        id:          row['ID']||'',
+        tipo:        row['Tipo']||'Sindicância',
+        portaria:    row['Nº Portaria']||row['Portaria']||'',
+        objeto:      row['Objeto']||'',
+        dataPortaria:cleanDate(row['Data Portaria']),   // FIX: remove horário UTC
+        prazo:       parseInt(row['Prazo (dias)']||'30'),
+        prorrogacoes:[],
+        comissao:    row['Comissão']||'',
+        fase:        row['Fase']||'Instrução',
+        adv:         row['Advogado do Acusado']||'—',
+        investigado: row['Investigado']||'',
+        setor:       row['Setor']||'',
+      })).filter(p=>p.id);
+    }
+
+    // ── Notas / Linha do Tempo ───────────────────
+    const r1b=await fetch(`${GAS_URL}?action=getTimeline`); const j1b=await r1b.json();
+    if(j1b.data?.length){
+      notas={};
+      j1b.data.forEach(row=>{
+        const pid=row['Processo ID']||row['processo_id']||'';
+        if(!pid) return;
+        if(!notas[pid]) notas[pid]=[];
+        notas[pid].push({
+          data:  cleanDate(row['Data']),
+          tipo:  row['Tipo de Nota']||row['Tipo']||'Nota geral',
+          texto: row['Texto']||'',
+        });
+      });
+    }
+
+    // ── Autos Digitais ───────────────────────────
+    const r1c=await fetch(`${GAS_URL}?action=getAutos`); const j1c=await r1c.json();
+    if(j1c.data?.length){
+      autos={};
+      j1c.data.forEach(row=>{
+        const pid=row['Processo ID']||'';
+        if(!pid) return;
+        if(!autos[pid]) autos[pid]=[];
+        autos[pid].push({
+          folha:       parseInt(row['Folha'])||1,
+          folhaInicio: parseInt(row['Folha'])||1,
+          pages:       parseInt(row['Páginas']||row['pages'])||1,
+          tipo:        row['Tipo']||'',
+          desc:        row['Descrição']||'',
+          data:        cleanDate(row['Data']),
+          autor:       row['Autor']||'',
+          driveId:     row['Drive File ID']||'',
+        });
+      });
+    }
+
+    // ── Membros ──────────────────────────────────
+    const r2=await fetch(`${GAS_URL}?action=getMembros`); const j2=await r2.json();
+    if(j2.data?.length){
+      membros=j2.data.map(m=>({
+        nome:               m['Nome']||'',
+        funcao:             m['Função']||m['Funcao']||'Membro',
+        comissao:           (m['Comissão']||m['Comissao']||'').replace('Comissão ',''),
+        tipo:               m['Tipo']||'Titular',
+        status:             m['Status']||'Ativo',
+        portariaConvocacao: m['Portaria Convocação']||m['Portaria']||'',
+      })).filter(m=>m.nome);
+    }
+
+    // ── Afastamentos ─────────────────────────────
+    const r3=await fetch(`${GAS_URL}?action=getAfastamentos`); const j3=await r3.json();
+    if(j3.data?.length){
+      afastamentos=j3.data.map(a=>({
+        id:                 'af'+Math.random(),
+        membro:             a['Membro']||'',
+        tipo:               a['Tipo']||'',
+        escopo:             a['Escopo']||'geral',
+        processoId:         a['Processo ID']||null,
+        portariaConvocacao: a['Portaria Convocação']||'',
+        inicio:             cleanDate(a['Data Início']||a['Início'])||null,
+        termino:            cleanDate(a['Data Término']||a['Término'])||null,
+        substituto:         a['Substituto']||'',
+        status:             a['Status']||'Em curso',
+      })).filter(a=>a.membro);
+    }
+
+    // ── Prorrogações ──────────────────────────────
+    const r1d=await fetch(`${GAS_URL}?action=getProrrogacoes`); const j1d=await r1d.json();
+    if(j1d.data?.length){
+      // Merge into processos array
+      j1d.data.forEach(row=>{
+        const p=processos.find(x=>x.id===(row['Processo ID']||''));
+        if(!p) return;
+        if(!p.prorrogacoes) p.prorrogacoes=[];
+        p.prorrogacoes.push({
+          portaria: row['Portaria']||'',
+          dias:     parseInt(row['Dias'])||0,
+          data:     cleanDate(row['Data']),
+          obs:      row['Obs']||''
+        });
+      });
+    }
+
+    // ── Testemunhas ───────────────────────────────
+    const r1e=await fetch(`${GAS_URL}?action=getTestemunhas`); const j1e=await r1e.json();
+    if(j1e.data?.length){
+      testemunhas={};
+      j1e.data.forEach(row=>{
+        const pid=row['Processo ID']||''; if(!pid) return;
+        if(!testemunhas[pid]) testemunhas[pid]=[];
+        testemunhas[pid].push({
+          nome:      row['Nome']||'',
+          qual:      row['Qualificação']||'',
+          cont:      row['Contato']||'',
+          intim:     cleanDate(row['Data Intimação']),
+          oitiva:    cleanDate(row['Data Oitiva']),
+          intimado:  row['Intimada']==='TRUE'||row['Intimada']===true,
+          realizada: row['Realizada']==='TRUE'||row['Realizada']===true,
+        });
+      });
+    }
+
+    // ── Prazos Extras ─────────────────────────────
+    const r1f=await fetch(`${GAS_URL}?action=getPrazosExtras`); const j1f=await r1f.json();
+    if(j1f.data?.length){
+      prazosExtras={};
+      j1f.data.forEach(row=>{
+        const pid=row['Processo ID']||''; if(!pid) return;
+        if(!prazosExtras[pid]) prazosExtras[pid]=[];
+        prazosExtras[pid].push({
+          tipo:   row['Tipo']||'',
+          inicio: cleanDate(row['Início']),
+          fim:    cleanDate(row['Limite']),
+          obs:    row['Obs']||''
+        });
+      });
+    }
+
+    // ── Agenda de Oitivas ─────────────────────────
+    const r1g=await fetch(`${GAS_URL}?action=getOitivas`); const j1g=await r1g.json();
+    if(j1g.data?.length){
+      agendaOitivas=j1g.data.map(row=>({
+        id:         row['ID']||'o'+Math.random(),
+        processoId: row['Processo ID']||'',
+        pessoa:     row['Pessoa']||'',
+        data:       cleanDate(row['Data']),
+        hora:       row['Hora']||'',
+        local:      row['Local']||'',
+        obs:        row['Obs']||''
+      })).filter(o=>o.processoId);
+    }
+
+    saveState();
+    toast(`${processos.length} processos sincronizados do Sheets`,'s');
+    const bar=document.getElementById('dash-sb'); bar.style.display='flex';
+    document.getElementById('dash-sb-msg').textContent='Sincronizado em '+new Date().toLocaleTimeString('pt-BR');
+    setTimeout(()=>bar.style.display='none',6000);
+  } catch(e){
+    console.error('[SECOP] Sync error:', e);
+    toast('Erro na sincronização. Verifique a URL em ⚙','e');
+  }
   setTimeout(()=>{ icon.style.animation=''; renderAll(); },900);
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 // RENDER ALL  (resilient)

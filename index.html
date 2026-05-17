@@ -1855,13 +1855,25 @@ function renderTimeline(id) {
 }
 
 // Helper: escreve para o Sheets de forma não-bloqueante, com retry silencioso
+// ── Comunicação com Google Apps Script ───────────────────────
+// POST: usa no-cors (fire-and-forget) — o browser entrega mas não lê a resposta
+// GET:  usa URL com callback para evitar CORS preflight
 function gasPost(data) {
   if (!GAS_URL) return;
+  // no-cors: não lemos a resposta, mas os dados chegam ao servidor
   fetch(GAS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain' }, // evita CORS preflight
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify(data)
-  }).catch(e => console.warn('[SECOP] GAS write failed:', e));
+  }).catch(e => console.warn('[SECOP] GAS write error:', e));
+}
+
+async function gasGet(action) {
+  const url = `${GAS_URL}?action=${action}&t=${Date.now()}`;
+  const resp = await fetch(url, { mode: 'cors' });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
 }
 
 function addNota() {
@@ -2040,177 +2052,127 @@ function salvarCfg() {
 }
 
 async function sincronizar() {
-  const icon=document.getElementById('sync-icon');
-  const css=document.createElement('style'); css.textContent='@keyframes spin{to{transform:rotate(360deg)}}'; document.head.appendChild(css);
-  icon.style.animation='spin 0.7s linear infinite';
-  if(!GAS_URL){ toast('Configure a URL do Apps Script em ⚙','i'); icon.style.animation=''; return; }
-  try{
-    // Helper: limpa datas que chegam com timezone do Sheets ("2025-02-10T03:00:00.000Z" → "2025-02-10")
-    function cleanDate(v){ if(!v) return ''; return String(v).split('T')[0]; }
+  const icon = document.getElementById('sync-icon');
+  const css = document.createElement('style');
+  css.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+  document.head.appendChild(css);
+  icon.style.animation = 'spin 0.7s linear infinite';
 
-    // ── Processos ────────────────────────────────
-    const r1=await fetch(`${GAS_URL}?action=getProcessos`); const j1=await r1.json();
-    if(j1.data?.length){
-      processos=j1.data.map(row=>({
-        id:          row['ID']||'',
-        tipo:        row['Tipo']||'Sindicância',
-        portaria:    row['Nº Portaria']||row['Portaria']||'',
-        objeto:      row['Objeto']||'',
-        dataPortaria:cleanDate(row['Data Portaria']),   // FIX: remove horário UTC
-        prazo:       parseInt(row['Prazo (dias)']||'30'),
-        prorrogacoes:[],
-        comissao:    row['Comissão']||'',
-        fase:        row['Fase']||'Instrução',
-        adv:         row['Advogado do Acusado']||'—',
-        investigado: row['Investigado']||'',
-        setor:       row['Setor']||'',
-      })).filter(p=>p.id);
+  if (!GAS_URL) {
+    toast('Configure a URL do Apps Script em ⚙', 'i');
+    icon.style.animation = '';
+    return;
+  }
+
+  function cleanDate(v) { if (!v) return ''; return String(v).split('T')[0]; }
+
+  let erros = 0;
+  async function load(action) {
+    try {
+      const j = await gasGet(action);
+      return j;
+    } catch(e) {
+      console.warn('[SECOP] Falha ao carregar ' + action + ':', e);
+      erros++;
+      return { data: null };
+    }
+  }
+
+  try {
+    const j1 = await load('getProcessos');
+    if (j1.data?.length) {
+      processos = j1.data.map(row => ({
+        id: row['ID']||'', tipo: row['Tipo']||'Sindicância',
+        portaria: row['Nº Portaria']||row['Portaria']||'',
+        objeto: row['Objeto']||'', dataPortaria: cleanDate(row['Data Portaria']),
+        prazo: parseInt(row['Prazo (dias)']||'30'), prorrogacoes: [],
+        comissao: row['Comissão']||'', fase: row['Fase']||'Instrução',
+        adv: row['Advogado do Acusado']||'—',
+        investigado: row['Investigado']||'', setor: row['Setor']||'',
+      })).filter(p => p.id);
     }
 
-    // ── Notas / Linha do Tempo ───────────────────
-    const r1b=await fetch(`${GAS_URL}?action=getTimeline`); const j1b=await r1b.json();
-    if(j1b.data?.length){
-      notas={};
-      j1b.data.forEach(row=>{
-        const pid=row['Processo ID']||row['processo_id']||'';
-        if(!pid) return;
-        if(!notas[pid]) notas[pid]=[];
-        notas[pid].push({
-          data:  cleanDate(row['Data']),
-          tipo:  row['Tipo de Nota']||row['Tipo']||'Nota geral',
-          texto: row['Texto']||'',
-        });
+    const j1d = await load('getProrrogacoes');
+    if (j1d.data?.length) {
+      j1d.data.forEach(row => {
+        const p = processos.find(x => x.id === (row['Processo ID']||''));
+        if (!p) return;
+        if (!p.prorrogacoes) p.prorrogacoes = [];
+        p.prorrogacoes.push({ portaria: row['Portaria']||'', dias: parseInt(row['Dias'])||0, data: cleanDate(row['Data']), obs: row['Obs']||'' });
       });
     }
 
-    // ── Autos Digitais ───────────────────────────
-    const r1c=await fetch(`${GAS_URL}?action=getAutos`); const j1c=await r1c.json();
-    if(j1c.data?.length){
-      autos={};
-      j1c.data.forEach(row=>{
-        const pid=row['Processo ID']||'';
-        if(!pid) return;
-        if(!autos[pid]) autos[pid]=[];
-        autos[pid].push({
-          folha:       parseInt(row['Folha'])||1,
-          folhaInicio: parseInt(row['Folha'])||1,
-          pages:       parseInt(row['Páginas']||row['pages'])||1,
-          tipo:        row['Tipo']||'',
-          desc:        row['Descrição']||'',
-          data:        cleanDate(row['Data']),
-          autor:       row['Autor']||'',
-          driveId:     row['Drive File ID']||'',
-        });
+    const j1b = await load('getTimeline');
+    if (j1b.data?.length) {
+      notas = {};
+      j1b.data.forEach(row => {
+        const pid = row['Processo ID']||''; if (!pid) return;
+        if (!notas[pid]) notas[pid] = [];
+        notas[pid].push({ data: cleanDate(row['Data']), tipo: row['Tipo de Nota']||row['Tipo']||'Nota geral', texto: row['Texto']||'' });
       });
     }
 
-    // ── Membros ──────────────────────────────────
-    const r2=await fetch(`${GAS_URL}?action=getMembros`); const j2=await r2.json();
-    if(j2.data?.length){
-      membros=j2.data.map(m=>({
-        nome:               m['Nome']||'',
-        funcao:             m['Função']||m['Funcao']||'Membro',
-        comissao:           (m['Comissão']||m['Comissao']||'').replace('Comissão ',''),
-        tipo:               m['Tipo']||'Titular',
-        status:             m['Status']||'Ativo',
-        portariaConvocacao: m['Portaria Convocação']||m['Portaria']||'',
-      })).filter(m=>m.nome);
-    }
-
-    // ── Afastamentos ─────────────────────────────
-    const r3=await fetch(`${GAS_URL}?action=getAfastamentos`); const j3=await r3.json();
-    if(j3.data?.length){
-      afastamentos=j3.data.map(a=>({
-        id:                 'af'+Math.random(),
-        membro:             a['Membro']||'',
-        tipo:               a['Tipo']||'',
-        escopo:             a['Escopo']||'geral',
-        processoId:         a['Processo ID']||null,
-        portariaConvocacao: a['Portaria Convocação']||'',
-        inicio:             cleanDate(a['Data Início']||a['Início'])||null,
-        termino:            cleanDate(a['Data Término']||a['Término'])||null,
-        substituto:         a['Substituto']||'',
-        status:             a['Status']||'Em curso',
-      })).filter(a=>a.membro);
-    }
-
-    // ── Prorrogações ──────────────────────────────
-    const r1d=await fetch(`${GAS_URL}?action=getProrrogacoes`); const j1d=await r1d.json();
-    if(j1d.data?.length){
-      // Merge into processos array
-      j1d.data.forEach(row=>{
-        const p=processos.find(x=>x.id===(row['Processo ID']||''));
-        if(!p) return;
-        if(!p.prorrogacoes) p.prorrogacoes=[];
-        p.prorrogacoes.push({
-          portaria: row['Portaria']||'',
-          dias:     parseInt(row['Dias'])||0,
-          data:     cleanDate(row['Data']),
-          obs:      row['Obs']||''
-        });
+    const j1c = await load('getAutos');
+    if (j1c.data?.length) {
+      autos = {};
+      j1c.data.forEach(row => {
+        const pid = row['Processo ID']||''; if (!pid) return;
+        if (!autos[pid]) autos[pid] = [];
+        autos[pid].push({ folha: parseInt(row['Folha'])||1, folhaInicio: parseInt(row['Folha'])||1, pages: parseInt(row['Páginas']||row['pages'])||1, tipo: row['Tipo']||'', desc: row['Descrição']||'', data: cleanDate(row['Data']), autor: row['Autor']||'', driveId: row['Drive File ID']||'' });
       });
     }
 
-    // ── Testemunhas ───────────────────────────────
-    const r1e=await fetch(`${GAS_URL}?action=getTestemunhas`); const j1e=await r1e.json();
-    if(j1e.data?.length){
-      testemunhas={};
-      j1e.data.forEach(row=>{
-        const pid=row['Processo ID']||''; if(!pid) return;
-        if(!testemunhas[pid]) testemunhas[pid]=[];
-        testemunhas[pid].push({
-          nome:      row['Nome']||'',
-          qual:      row['Qualificação']||'',
-          cont:      row['Contato']||'',
-          intim:     cleanDate(row['Data Intimação']),
-          oitiva:    cleanDate(row['Data Oitiva']),
-          intimado:  row['Intimada']==='TRUE'||row['Intimada']===true,
-          realizada: row['Realizada']==='TRUE'||row['Realizada']===true,
-        });
+    const j2 = await load('getMembros');
+    if (j2.data?.length) {
+      membros = j2.data.map(m => ({ nome: m['Nome']||'', funcao: m['Função']||m['Funcao']||'Membro', comissao: (m['Comissão']||m['Comissao']||'').replace('Comissão ',''), tipo: m['Tipo']||'Titular', status: m['Status']||'Ativo', portariaConvocacao: m['Portaria Convocação']||'' })).filter(m => m.nome);
+    }
+
+    const j3 = await load('getAfastamentos');
+    if (j3.data?.length) {
+      afastamentos = j3.data.map(a => ({ id:'af'+Math.random(), membro: a['Membro']||'', tipo: a['Tipo']||'', escopo: a['Escopo']||'geral', processoId: a['Processo ID']||null, portariaConvocacao: a['Portaria Convocação']||'', inicio: cleanDate(a['Data Início']||a['Início'])||null, termino: cleanDate(a['Data Término']||a['Término'])||null, substituto: a['Substituto']||'', status: a['Status']||'Em curso' })).filter(a => a.membro);
+    }
+
+    const j1e = await load('getTestemunhas');
+    if (j1e.data?.length) {
+      testemunhas = {};
+      j1e.data.forEach(row => {
+        const pid = row['Processo ID']||''; if (!pid) return;
+        if (!testemunhas[pid]) testemunhas[pid] = [];
+        testemunhas[pid].push({ nome: row['Nome']||'', qual: row['Qualificação']||'', cont: row['Contato']||'', intim: cleanDate(row['Data Intimação']), oitiva: cleanDate(row['Data Oitiva']), intimado: row['Intimada']==='TRUE'||row['Intimada']===true, realizada: row['Realizada']==='TRUE'||row['Realizada']===true });
       });
     }
 
-    // ── Prazos Extras ─────────────────────────────
-    const r1f=await fetch(`${GAS_URL}?action=getPrazosExtras`); const j1f=await r1f.json();
-    if(j1f.data?.length){
-      prazosExtras={};
-      j1f.data.forEach(row=>{
-        const pid=row['Processo ID']||''; if(!pid) return;
-        if(!prazosExtras[pid]) prazosExtras[pid]=[];
-        prazosExtras[pid].push({
-          tipo:   row['Tipo']||'',
-          inicio: cleanDate(row['Início']),
-          fim:    cleanDate(row['Limite']),
-          obs:    row['Obs']||''
-        });
+    const j1f = await load('getPrazosExtras');
+    if (j1f.data?.length) {
+      prazosExtras = {};
+      j1f.data.forEach(row => {
+        const pid = row['Processo ID']||''; if (!pid) return;
+        if (!prazosExtras[pid]) prazosExtras[pid] = [];
+        prazosExtras[pid].push({ tipo: row['Tipo']||'', inicio: cleanDate(row['Início']), fim: cleanDate(row['Limite']), obs: row['Obs']||'' });
       });
     }
 
-    // ── Agenda de Oitivas ─────────────────────────
-    const r1g=await fetch(`${GAS_URL}?action=getOitivas`); const j1g=await r1g.json();
-    if(j1g.data?.length){
-      agendaOitivas=j1g.data.map(row=>({
-        id:         row['ID']||'o'+Math.random(),
-        processoId: row['Processo ID']||'',
-        pessoa:     row['Pessoa']||'',
-        data:       cleanDate(row['Data']),
-        hora:       row['Hora']||'',
-        local:      row['Local']||'',
-        obs:        row['Obs']||''
-      })).filter(o=>o.processoId);
+    const j1g = await load('getOitivas');
+    if (j1g.data?.length) {
+      agendaOitivas = j1g.data.map(row => ({ id: row['ID']||'o'+Math.random(), processoId: row['Processo ID']||'', pessoa: row['Pessoa']||'', data: cleanDate(row['Data']), hora: row['Hora']||'', local: row['Local']||'', obs: row['Obs']||'' })).filter(o => o.processoId);
     }
 
     saveState();
-    toast(`${processos.length} processos sincronizados do Sheets`,'s');
-    const bar=document.getElementById('dash-sb'); bar.style.display='flex';
-    document.getElementById('dash-sb-msg').textContent='Sincronizado em '+new Date().toLocaleTimeString('pt-BR');
-    setTimeout(()=>bar.style.display='none',6000);
-  } catch(e){
-    console.error('[SECOP] Sync error:', e);
-    toast('Erro na sincronização. Verifique a URL em ⚙','e');
+    toast(`${processos.length} processos sincronizados` + (erros ? ` (${erros} erro(s))` : ''), erros ? 'i' : 's');
+    const bar = document.getElementById('dash-sb');
+    bar.style.display = 'flex';
+    document.getElementById('dash-sb-msg').textContent = 'Sincronizado em ' + new Date().toLocaleTimeString('pt-BR');
+    setTimeout(() => bar.style.display = 'none', 6000);
+
+  } catch(e) {
+    console.error('[SECOP] Erro crítico:', e);
+    toast('Falha — verifique a URL em ⚙ e se o Apps Script está publicado', 'e');
   }
-  setTimeout(()=>{ icon.style.animation=''; renderAll(); },900);
+
+  icon.style.animation = '';
+  renderAll();
 }
+
 
 
 // ═══════════════════════════════════════════════════════════════

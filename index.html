@@ -1856,24 +1856,26 @@ function renderTimeline(id) {
 
 // Helper: escreve para o Sheets de forma não-bloqueante, com retry silencioso
 // ── Comunicação com Google Apps Script ───────────────────────
-// POST: usa no-cors (fire-and-forget) — o browser entrega mas não lê a resposta
-// GET:  usa URL com callback para evitar CORS preflight
-function gasPost(data) {
-  if (!GAS_URL) return;
-  // no-cors: não lemos a resposta, mas os dados chegam ao servidor
-  fetch(GAS_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify(data)
-  }).catch(e => console.warn('[SECOP] GAS write error:', e));
-}
-
+// GET funciona nativamente com CORS no Apps Script publicado como "Anyone".
+// Usamos GET para TUDO (leitura e escrita) — o payload vai como parâmetro 'd'.
+// Isso elimina todos os problemas de CORS preflight e no-cors.
 async function gasGet(action) {
-  const url = `${GAS_URL}?action=${action}&t=${Date.now()}`;
+  if (!GAS_URL) throw new Error('GAS_URL não configurada');
+  const url = `${GAS_URL}?action=${encodeURIComponent(action)}&t=${Date.now()}`;
   const resp = await fetch(url, { mode: 'cors' });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json();
+}
+
+// Escrita via GET: serializa payload como parâmetro 'd'
+function gasPost(data) {
+  if (!GAS_URL) return;
+  const payload = encodeURIComponent(JSON.stringify(data));
+  const url = `${GAS_URL}?d=${payload}&t=${Date.now()}`;
+  fetch(url, { mode: 'cors' })
+    .then(r => r.json())
+    .then(j => { if (j.error) console.warn('[SECOP] GAS error:', j.error); })
+    .catch(e => console.warn('[SECOP] GAS write failed:', e));
 }
 
 function addNota() {
@@ -1902,19 +1904,26 @@ function salvarProc() {
   const objeto=document.getElementById('np-obj').value.trim();
   const data=document.getElementById('np-data').value;
   if(!portaria||!objeto||!data){toast('Preencha portaria, objeto e data','e');return;}
-  const prefix=tipo==='PAD'?'PAD':'SIN';
-  const id=`${prefix}-${String(processos.length+1).padStart(3,'0')}/${new Date().getFullYear()}`;
-  const p={id,tipo,portaria,objeto,dataPortaria:data,prazo:tipo==='PAD'?60:30,prorrogacoes:[],
+  const prefix = tipo === 'PAD' ? 'PAD' : 'SIN';
+  const ano = new Date().getFullYear();
+  // Conta apenas processos do mesmo tipo e ano para gerar sequencial correto
+  const seq = processos.filter(p => p.tipo === tipo && p.id.endsWith(`/${ano}`)).length + 1;
+  const id = `${prefix}-${String(seq).padStart(3,'0')}/${ano}`;
+  // Garante unicidade caso já exista (ex: dados importados fora de ordem)
+  const idFinal = processos.find(p => p.id === id)
+    ? `${prefix}-${String(Date.now()).slice(-5)}/${ano}`
+    : id;
+  const p={id:idFinal,tipo,portaria,objeto,dataPortaria:data,prazo:tipo==='PAD'?60:30,prorrogacoes:[],
     comissao:document.getElementById('np-com').value,fase:document.getElementById('np-fase').value,
     adv:document.getElementById('np-adv').value||'—',investigado:'',setor:''};
   const obs=document.getElementById('np-obs').value;
-  if(obs) notas[id]=[{data:hojeISO(),tipo:'Nota geral',texto:obs}];
+  if(obs) notas[idFinal]=[{data:hojeISO(),tipo:'Nota geral',texto:obs}];
   processos.unshift(p);
   gasPost({action:'addProcesso', data:p});
-  if(obs) gasPost({action:'addNota', data:{processoId:id,data:hojeISO(),tipo:'Nota geral',texto:obs}});
+  if(obs) gasPost({action:'addNota', data:{processoId:idFinal,data:hojeISO(),tipo:'Nota geral',texto:obs}});
   saveState(); closeM('m-novo-proc');
   ['np-port','np-obj','np-data','np-adv','np-obs'].forEach(id=>document.getElementById(id).value='');
-  renderAll(); toast(`Processo ${id} registrado`,'s');
+  renderAll(); toast(`Processo ${idFinal} registrado`,'s');
 }
 
 // ═══════════════════════════════════════════════════════════════

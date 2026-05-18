@@ -478,6 +478,10 @@ input[type=checkbox]{width:14px;height:14px;accent-color:var(--blue);cursor:poin
   <div class="mh"><div class="mt"><i class="ti ti-settings"></i>Configuração</div><button class="xb" onclick="closeM('m-config')"><i class="ti ti-x"></i></button></div>
   <div class="mb">
     <div class="fg"><label class="fl">URL do Google Apps Script</label><input class="fc" id="cfg-url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+      <button class="btn btn-sm" id="btn-testar" onclick="testarConexao()"><i class="ti ti-plug"></i>Testar conexão</button>
+      <span id="test-result" style="font-size:11px;color:var(--tx2);flex:1;white-space:pre-line"></span>
+    </div>
     <div style="margin-bottom:10px;padding:7px 10px;background:var(--amber-bg);border-radius:var(--r);font-size:11px;color:var(--amber);display:flex;gap:6px">
       <i class="ti ti-shield-exclamation" style="font-size:13px;flex-shrink:0;margin-top:1px"></i>
       <span>A URL do Apps Script é a chave de acesso aos dados. Compartilhe apenas com usuários autorizados. Para maior segurança, adicione verificação de token no <code>Code.gs</code>.</span>
@@ -1856,27 +1860,83 @@ function renderTimeline(id) {
 
 // Helper: escreve para o Sheets de forma não-bloqueante, com retry silencioso
 // ── Comunicação com Google Apps Script ───────────────────────
-// GET funciona nativamente com CORS no Apps Script publicado como "Anyone".
-// Usamos GET para TUDO (leitura e escrita) — o payload vai como parâmetro 'd'.
-// Isso elimina todos os problemas de CORS preflight e no-cors.
+// Apps Script publicado como "Anyone" aceita:
+//   GET  → sem preflight, retorna JSON com CORS header automático
+//   POST com Content-Type: text/plain → sem preflight (simple request)
+//
+// IMPORTANTE: Content-Type: application/json causa preflight que o
+// Apps Script não responde corretamente. text/plain não causa preflight.
+
 async function gasGet(action) {
   if (!GAS_URL) throw new Error('GAS_URL não configurada');
   const url = `${GAS_URL}?action=${encodeURIComponent(action)}&t=${Date.now()}`;
-  const resp = await fetch(url, { mode: 'cors' });
+  const resp = await fetch(url);
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  return resp.json();
+  const text = await resp.text();
+  try { return JSON.parse(text); }
+  catch(e) { throw new Error('Resposta inválida: ' + text.substring(0, 100)); }
 }
 
-// Escrita via GET: serializa payload como parâmetro 'd'
+async function gasPostAsync(data) {
+  if (!GAS_URL) return;
+  const resp = await fetch(GAS_URL, {
+    method: 'POST',
+    // text/plain não dispara preflight — funciona com Apps Script
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(data)
+  });
+  const text = await resp.text();
+  try { return JSON.parse(text); }
+  catch(e) { return { raw: text }; }
+}
+
 function gasPost(data) {
   if (!GAS_URL) return;
-  const payload = encodeURIComponent(JSON.stringify(data));
-  const url = `${GAS_URL}?d=${payload}&t=${Date.now()}`;
-  fetch(url, { mode: 'cors' })
-    .then(r => r.json())
-    .then(j => { if (j.error) console.warn('[SECOP] GAS error:', j.error); })
-    .catch(e => console.warn('[SECOP] GAS write failed:', e));
+  gasPostAsync(data)
+    .then(j => {
+      if (j?.error) console.warn('[SECOP] GAS error:', j.error, data);
+      else console.log('[SECOP] GAS ok:', data.action);
+    })
+    .catch(e => console.warn('[SECOP] GAS write failed:', data.action, e.message));
 }
+
+// Teste de diagnóstico — chamado pelo botão no modal de config
+async function testarConexao() {
+  const btn = document.getElementById('btn-testar');
+  const res = document.getElementById('test-result');
+  if (!GAS_URL) { res.textContent = '✗ URL não configurada'; res.style.color='var(--red)'; return; }
+
+  btn.disabled = true;
+  res.textContent = 'Testando leitura (GET)...';
+  res.style.color = 'var(--tx2)';
+
+  try {
+    const j = await gasGet('ping');
+    res.textContent = `✓ GET ok — ${j.msg || JSON.stringify(j)}`;
+    res.style.color = 'var(--green)';
+  } catch(e) {
+    res.textContent = `✗ GET falhou: ${e.message}`;
+    res.style.color = 'var(--red)';
+    btn.disabled = false;
+    return;
+  }
+
+  res.textContent += '\nTestando escrita (POST)...';
+  try {
+    const j = await gasPostAsync({
+      action: 'ping',
+      data: { ts: new Date().toISOString() }
+    });
+    res.textContent += `\n✓ POST ok — ${j?.msg || JSON.stringify(j)}`;
+    res.style.color = 'var(--green)';
+  } catch(e) {
+    res.textContent += `\n✗ POST falhou: ${e.message}`;
+    res.style.color = 'var(--amber)';
+  }
+
+  btn.disabled = false;
+}
+
 
 function addNota() {
   const txt=document.getElementById('nova-nota').value.trim();

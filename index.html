@@ -246,6 +246,7 @@ input[type=checkbox]{width:14px;height:14px;accent-color:var(--blue);cursor:poin
   </div>
   <div class="tbr">
     <button class="tbtn" onclick="sincronizar()"><i class="ti ti-refresh" id="sync-icon"></i>Sincronizar</button>
+    <span id="gas-status" style="font-size:10px;padding:0 4px;cursor:default" title="Status API">○</span>
     <button class="tbtn" onclick="mostrarLogEscrita()" title="Log de sincronização"><i class="ti ti-terminal-2"></i></button>
     <button class="tbtn" onclick="openM('m-config')"><i class="ti ti-settings"></i></button>
   </div>
@@ -755,7 +756,18 @@ input[type=checkbox]{width:14px;height:14px;accent-color:var(--blue);cursor:poin
 // ═══════════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════════
-let GAS_URL = localStorage.getItem('secop_gas_url') || '';
+// Quando servido pelo Apps Script, a URL base é a própria URL da página
+// (window.location.href sem parâmetros). Isso elimina CORS completamente.
+// Quando aberto como arquivo local ou GitHub Pages, usa o localStorage.
+function detectGasUrl() {
+  const href = window.location.href;
+  // Apps Script URLs contêm /macros/s/ no caminho
+  if (href.includes('script.google.com/macros/s/')) {
+    return href.split('?')[0];
+  }
+  return localStorage.getItem('secop_gas_url') || '';
+}
+let GAS_URL = detectGasUrl();
 let CFG = {
   secretario: localStorage.getItem('secop_sec') || 'Secretário(a) da Comissão',
   orgao:      localStorage.getItem('secop_org') || 'Secretaria de Comissões Permanentes'
@@ -2169,13 +2181,15 @@ function abrirAutosProc(id) { autosProc=id; closeM('m-detalhe'); navTo('autos',d
 // CONFIG / SYNC  (Fix #9: nota sobre segurança do GAS_URL)
 // ═══════════════════════════════════════════════════════════════
 function salvarCfg() {
-  GAS_URL=document.getElementById('cfg-url').value.trim();
-  CFG.secretario=document.getElementById('cfg-sec').value.trim()||CFG.secretario;
-  CFG.orgao=document.getElementById('cfg-org').value.trim()||CFG.orgao;
-  localStorage.setItem('secop_gas_url',GAS_URL);
-  localStorage.setItem('secop_sec',CFG.secretario);
-  localStorage.setItem('secop_org',CFG.orgao);
-  closeM('m-config'); toast('Configuração salva','s');
+  const inputUrl = document.getElementById('cfg-url').value.trim();
+  GAS_URL = inputUrl || detectGasUrl();
+  CFG.secretario = document.getElementById('cfg-sec').value.trim() || CFG.secretario;
+  CFG.orgao      = document.getElementById('cfg-org').value.trim() || CFG.orgao;
+  if (inputUrl) localStorage.setItem('secop_gas_url', inputUrl);
+  localStorage.setItem('secop_sec', CFG.secretario);
+  localStorage.setItem('secop_org', CFG.orgao);
+  closeM('m-config');
+  toast('Configuração salva' + (GAS_URL ? ' — API: ' + GAS_URL.substring(0,40) + '...' : ''), 's');
 }
 
 async function sincronizar() {
@@ -2318,9 +2332,24 @@ function renderAll() {
   safe(renderGratificacao,'renderGratificacao');
   safe(renderInstrucaoSel,'renderInstrucaoSel');
   if(document.getElementById('page-instrucao').classList.contains('active')) safe(renderInstrucao,'renderInstrucao');
-  document.getElementById('cfg-url').value=GAS_URL;
-  document.getElementById('cfg-sec').value=CFG.secretario;
-  document.getElementById('cfg-org').value=CFG.orgao;
+  // Config modal — mostra URL detectada automaticamente se aplicável
+  const autoUrl = detectGasUrl();
+  const cfgUrlEl = document.getElementById('cfg-url');
+  if (cfgUrlEl) {
+    cfgUrlEl.value = GAS_URL;
+    cfgUrlEl.placeholder = autoUrl
+      ? 'Auto-detectada: ' + autoUrl.substring(0,50) + '...'
+      : 'https://script.google.com/macros/s/.../exec';
+  }
+  document.getElementById('cfg-sec').value = CFG.secretario;
+  document.getElementById('cfg-org').value = CFG.orgao;
+  // Atualiza indicador na topbar
+  const syncIndicator = document.getElementById('gas-status');
+  if (syncIndicator) {
+    syncIndicator.textContent = GAS_URL ? '●' : '○';
+    syncIndicator.title = GAS_URL ? 'API conectada: ' + GAS_URL : 'API não configurada';
+    syncIndicator.style.color = GAS_URL ? 'rgba(255,255,255,0.7)' : 'rgba(255,100,100,0.8)';
+  }
   safe(()=>populateAfForm(),'populateAfForm');
 }
 
